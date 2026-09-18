@@ -1,0 +1,88 @@
+# GardenCore configuration
+
+obols:
+  display-name: "Obol"
+  # The resource pack renames Emeralds to Obols client-side. Keep this true so those stacks can be deposited.
+  accept-plain-emeralds: true
+  lore:
+    - "Official currency"
+  symbol: "⟡"
+  singular: "Obol"
+  plural: "Obols"
+  starting-balance: 0
+  # While EssentialsX is still installed, GardenCore can copy its Vault balances
+  # into the Garden ledger once. After verifying balances, EssentialsX can be removed.
+  migrate-existing-vault-provider: true
+
+# Local development can use SQLite with no setup.
+# For Bisect, change type to mariadb and fill in the credentials Bisect gives you.
+database:
+  type: sqlite
+  sqlite-file: gardencore.db
+  mariadb:
+    host: 127.0.0.1
+    port: 3306
+    database: gardencore
+    username: gardencore
+    password: ""
+    ssl: false
+  pool:
+    maximum-size: 5
+    connection-timeout-ms: 5000
+
+claims:
+  minimum-area: 4
+  maximum-vertices: 64
+
+  # These are starting limits and can be changed later without rebuilding GardenCore.
+  player-limits:
+    territories: 1
+    major-properties: 3
+    apartments: 5
+    shops: 15
+
+  territory:
+    minimum-area: 10000
+    minimum-span: 100
+
+  preview:
+    refresh-ticks: 10
+    maximum-fill-particles: 500
+
+  # The first public settings applied when a new claim is created.
+  # Owners are always allowed unless a future server hard-policy says otherwise.
+  default-permissions:
+    public:
+      build: DENY
+      break: DENY
+      door_use: DENY
+      container_open: DENY
+      container_insert: DENY
+      container_take: DENY
+      container_break: DENY
+
+  # Used only when a claim has no explicit setting and no parent provides one.
+  server-defaults:
+    public:
+      build: false
+      break: false
+      door_use: false
+      container_open: false
+      container_insert: false
+      container_take: false
+      container_break: false
+
+ore-migration:
+  enabled: true
+  # Bump this only when the migration rules change; chunks are scanned once per version.
+  version: 1
+  chunks-per-tick: 1
+  min-y: -16
+  max-y: 320
+
+# Legacy YAML/WorldGuard property signs are migration-only.
+# Keep this false on v6 so GardenLands is the only active property-sign system.
+properties:
+  legacy-worldguard-signs-enabled: false
+  auto-bind-mailbox-from-sign: true
+  sign-price-prefix: "⟡ "
