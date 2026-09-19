@@ -102,6 +102,16 @@ public final class PlatformSchema {
                     + "meta_key VARCHAR(96) PRIMARY KEY,"
                     + "meta_value TEXT NULL,"
                     + "updated_at BIGINT NOT NULL)");
+
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS gc_marriages ("
+                    + "marriage_uuid VARCHAR(36) PRIMARY KEY,"
+                    + "player1_uuid VARCHAR(36) NOT NULL,"
+                    + "player2_uuid VARCHAR(36) NOT NULL,"
+                    + "married_at BIGINT NOT NULL)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_gc_marriages_player1 "
+                    + "ON gc_marriages (player1_uuid)");
+            statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_gc_marriages_player2 "
+                    + "ON gc_marriages (player2_uuid)");
         }
     }
 }

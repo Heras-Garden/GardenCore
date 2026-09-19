@@ -109,10 +109,8 @@ properties:
   auto-bind-mailbox-from-sign: true
   sign-price-prefix: "⟡ "
 
-# MarriageMaster integration. Marriage Master handles the proposal/accept flow;
-# GardenCore provides Obols through Vault and shares personal land/home/horse access.
+# Native Garden marriage system.
 marriage:
-  sync-marriage-master-settings: true
-  # Total marriage cost. Marriage Master splits this evenly between both players.
-  cost: 500.0
-  divorce-cost: 0.0
+  # Total marriage cost. Each player pays half when the proposal is accepted.
+  cost: 500
+  proposal-expire-seconds: 120

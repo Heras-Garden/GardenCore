@@ -37,7 +37,8 @@ import com.herasgarden.gardencore.property.PropertySignListener;
 import com.herasgarden.gardencore.property.PropertyService;
 import com.herasgarden.gardencore.territory.TerritoryRepository;
 import com.herasgarden.gardencore.territory.TerritoryService;
-import com.herasgarden.gardencore.social.MarriageMasterIntegration;
+import com.herasgarden.gardencore.social.MarriageCommand;
+import com.herasgarden.gardencore.social.MarriageService;
 import com.herasgarden.gardencore.horse.HorseAccessListener;
 import com.herasgarden.gardencore.horse.HorseCommand;
 import com.herasgarden.gardencore.claim.AdminClaimCommand;
@@ -79,7 +80,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     private ClaimOwnershipBridge claimOwnershipBridge;
     private OrganizationDirectory organizationDirectory;
     private PropertyManagementService propertyManagementService;
-    private MarriageMasterIntegration marriageIntegration;
+    private MarriageService marriageService;
 
     @Override
     public void onEnable() {
@@ -99,11 +100,24 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getServicesManager().register(OrganizationDirectory.class, organizationDirectory, this, ServicePriority.Normal);
         getServer().getServicesManager().register(
                 PropertyManagementService.class, propertyManagementService, this, ServicePriority.Normal);
-        marriageIntegration = new MarriageMasterIntegration(this);
-        marriageIntegration.applyConfiguredSettings();
-        claimService.setMarriageDirectory(marriageIntegration);
+        marriageService = new MarriageService(this, databaseManager, gardenEconomy);
+        try {
+            marriageService.load();
+        } catch (SQLException exception) {
+            getLogger().severe("Garden marriage data could not be loaded: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        claimService.setMarriageDirectory(marriageService);
         getServer().getServicesManager().register(
-                MarriageDirectory.class, marriageIntegration, this, ServicePriority.Normal);
+                MarriageDirectory.class, marriageService, this, ServicePriority.Normal);
+
+        PluginCommand marry = getCommand("marry");
+        if (marry != null) {
+            MarriageCommand marriageCommand = new MarriageCommand(this, marriageService);
+            marry.setExecutor(marriageCommand);
+            marry.setTabCompleter(marriageCommand);
+        }
 
         obolService = new ObolService(this, economy);
 

@@ -6,7 +6,7 @@ author: Hera's Garden
 website: https://herasgarden.net
 description: Shared platform systems for The Garden SMP, including Obols, claims, organizations, storage, and integrations.
 depend: [Vault]
-softdepend: [Essentials, WorldGuard, MarriageMaster]
+softdepend: [Essentials, WorldGuard]
 
 commands:
   obol:
@@ -30,6 +30,9 @@ commands:
   horse:
     description: Manage who may ride your tamed horse.
     usage: /horse <name|info|access|trust|untrust>
+  marry:
+    description: Propose marriage, respond to proposals, or manage your marriage.
+    usage: /marry <player|accept|deny|cancel|info|divorce>
 
 permissions:
   gardencore.obol:
