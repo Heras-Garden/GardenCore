@@ -336,7 +336,8 @@ public final class ClaimCommand {
     private boolean blocks(Player player) {
         Messages.send(player, "Home claim blocks: " + profiles.usedHomeBlocks(player.getUniqueId()) + " used / "
                 + profiles.totalHomeBlocks(player.getUniqueId()) + " total / "
-                + profiles.availableHomeBlocks(player.getUniqueId()) + " available.");
+                + profiles.availableHomeBlocks(player.getUniqueId()) + " available. Current price: ⟡ "
+                + profiles.pricePerBlock() + " per block.");
         return true;
     }
 

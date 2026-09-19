@@ -2,6 +2,7 @@ package com.herasgarden.gardencore;
 
 import com.herasgarden.gardencore.api.GardenPlatform;
 import com.herasgarden.gardencore.api.claim.ClaimOwnershipBridge;
+import com.herasgarden.gardencore.api.claim.ClaimBlockService;
 import com.herasgarden.gardencore.api.economy.GardenEconomy;
 import com.herasgarden.gardencore.api.integration.IntegrationInbox;
 import com.herasgarden.gardencore.api.integration.IntegrationOutbox;
@@ -88,6 +89,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getServicesManager().register(GardenStorage.class, gardenStorage, this, ServicePriority.Normal);
         getServer().getServicesManager().register(GardenEconomy.class, gardenEconomy, this, ServicePriority.Normal);
         getServer().getServicesManager().register(ClaimOwnershipBridge.class, claimOwnershipBridge, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(ClaimBlockService.class, claimProfileService, this, ServicePriority.Normal);
         getServer().getServicesManager().register(OrganizationDirectory.class, organizationDirectory, this, ServicePriority.Normal);
         getServer().getServicesManager().register(
                 PropertyManagementService.class, propertyManagementService, this, ServicePriority.Normal);

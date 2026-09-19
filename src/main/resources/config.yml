@@ -49,7 +49,15 @@ claims:
     starting: 50
     minutes-per-award: 30
     blocks-per-award: 1
-    purchase-price-per-block: 1
+    pricing:
+      # Claim-block prices automatically follow the current player economy.
+      # One block defaults to 0.25% of the median active player balance.
+      median-balance-share-per-block: 0.0025
+      active-window-days: 30
+      minimum-active-accounts: 5
+      fallback-price-per-block: 1
+      minimum-price-per-block: 1
+      maximum-price-per-block: 100
 
   inactivity:
     unprotected-home-days: 90

@@ -2,15 +2,19 @@ package com.herasgarden.gardencore.claim;
 
 import com.herasgarden.gardencore.GardenCore;
 import com.herasgarden.gardencore.database.DatabaseManager;
+import com.herasgarden.gardencore.api.claim.ClaimBlockService;
 import org.bukkit.entity.Player;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
-public final class ClaimProfileService {
+public final class ClaimProfileService implements ClaimBlockService {
     private final GardenCore plugin;
     private final DatabaseManager database;
     private final ClaimService claims;
@@ -93,35 +97,108 @@ public final class ClaimProfileService {
         return Math.max(0L, totalHomeBlocks(playerId) - usedHomeBlocks(playerId));
     }
 
-    public PurchaseResult purchase(Player player, long blocks) throws SQLException {
-        if (blocks <= 0) throw new IllegalArgumentException("Claim blocks must be a positive whole number.");
-        long pricePerBlock = Math.max(1L, plugin.getConfig().getLong("claims.home-blocks.purchase-price-per-block", 1L));
-        long total;
+    @Override
+    public long pricePerBlock() {
+        long fallback = Math.max(1L,
+                plugin.getConfig().getLong("claims.home-blocks.pricing.fallback-price-per-block",
+                        plugin.getConfig().getLong("claims.home-blocks.purchase-price-per-block", 1L)));
+        long minimum = Math.max(1L,
+                plugin.getConfig().getLong("claims.home-blocks.pricing.minimum-price-per-block", 1L));
+        long maximum = Math.max(minimum,
+                plugin.getConfig().getLong("claims.home-blocks.pricing.maximum-price-per-block", 100L));
+        double share = Math.max(0.0D,
+                plugin.getConfig().getDouble("claims.home-blocks.pricing.median-balance-share-per-block", 0.0025D));
+
+        long median = medianEconomyBalance();
+        if (median < 0L) return Math.min(maximum, Math.max(minimum, fallback));
+
+        long dynamic;
         try {
-            total = Math.multiplyExact(blocks, pricePerBlock);
+            dynamic = Math.round(median * share);
+        } catch (ArithmeticException exception) {
+            dynamic = maximum;
+        }
+        return Math.min(maximum, Math.max(minimum, dynamic));
+    }
+
+    @Override
+    public long quote(long blocks) {
+        if (blocks <= 0L) throw new IllegalArgumentException("Claim blocks must be a positive whole number.");
+        try {
+            return Math.multiplyExact(blocks, pricePerBlock());
         } catch (ArithmeticException exception) {
             throw new IllegalArgumentException("That claim-block purchase is too large.");
         }
-        if (!plugin.currency().withdraw(player.getUniqueId(), total)) {
-            return new PurchaseResult(false, "You need ⟡ " + total + " to buy " + blocks + " claim blocks.");
-        }
-        ensure(player.getUniqueId());
+    }
+
+    @Override
+    public boolean purchase(UUID playerId, long blocks) throws SQLException {
+        long total = quote(blocks);
+        if (!plugin.currency().withdraw(playerId, total)) return false;
+
+        ensure(playerId);
         try (Connection connection = database.connection();
              PreparedStatement statement = connection.prepareStatement(
                      "UPDATE gc_player_claim_profiles SET purchased_blocks = purchased_blocks + ?, updated_at = ? "
                              + "WHERE player_uuid = ?")) {
             statement.setLong(1, blocks);
             statement.setLong(2, System.currentTimeMillis());
-            statement.setString(3, player.getUniqueId().toString());
+            statement.setString(3, playerId.toString());
             if (statement.executeUpdate() != 1) {
-                plugin.currency().deposit(player.getUniqueId(), total);
-                return new PurchaseResult(false, "The purchase could not be saved. Your Obols were returned.");
+                plugin.currency().deposit(playerId, total);
+                return false;
             }
         } catch (SQLException exception) {
-            plugin.currency().deposit(player.getUniqueId(), total);
+            plugin.currency().deposit(playerId, total);
             throw exception;
         }
+        return true;
+    }
+
+    public PurchaseResult purchase(Player player, long blocks) throws SQLException {
+        long total = quote(blocks);
+        if (!purchase(player.getUniqueId(), blocks)) {
+            return new PurchaseResult(false, "You need ⟡ " + total + " to buy " + blocks + " claim blocks.");
+        }
         return new PurchaseResult(true, "Bought " + blocks + " claim blocks for ⟡ " + total + ".");
+    }
+
+    private long medianEconomyBalance() {
+        int activeDays = Math.max(1,
+                plugin.getConfig().getInt("claims.home-blocks.pricing.active-window-days", 30));
+        int minimumAccounts = Math.max(1,
+                plugin.getConfig().getInt("claims.home-blocks.pricing.minimum-active-accounts", 5));
+        long cutoff = System.currentTimeMillis() - activeDays * 86_400_000L;
+
+        try {
+            List<Long> balances = loadBalances(cutoff);
+            if (balances.size() < minimumAccounts) balances = loadBalances(0L);
+            if (balances.isEmpty()) return -1L;
+            Collections.sort(balances);
+            int middle = balances.size() / 2;
+            if ((balances.size() & 1) == 1) return balances.get(middle);
+            long left = balances.get(middle - 1);
+            long right = balances.get(middle);
+            return left + (right - left) / 2L;
+        } catch (SQLException exception) {
+            plugin.getLogger().warning("Could not calculate dynamic claim-block pricing: " + exception.getMessage());
+            return -1L;
+        }
+    }
+
+    private List<Long> loadBalances(long updatedAfter) throws SQLException {
+        List<Long> balances = new ArrayList<>();
+        String sql = updatedAfter > 0L
+                ? "SELECT balance FROM gc_player_balances WHERE updated_at >= ? AND balance >= 0"
+                : "SELECT balance FROM gc_player_balances WHERE balance >= 0";
+        try (Connection connection = database.connection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            if (updatedAfter > 0L) statement.setLong(1, updatedAfter);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) balances.add(result.getLong("balance"));
+            }
+        }
+        return balances;
     }
 
     public void lockEarning(UUID playerId) throws SQLException {

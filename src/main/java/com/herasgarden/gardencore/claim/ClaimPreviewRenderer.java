@@ -6,18 +6,25 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class ClaimPreviewRenderer {
+    private static final int MAX_GLOWSTONE_MARKERS = 600;
+
     private final GardenCore plugin;
     private final ClaimSessionManager sessions;
+    private final Map<UUID, Set<PreviewBlock>> glowstoneByPlayer = new HashMap<>();
     private BukkitTask task;
 
     public ClaimPreviewRenderer(GardenCore plugin, ClaimSessionManager sessions) {
@@ -36,14 +43,26 @@ public final class ClaimPreviewRenderer {
             task.cancel();
             task = null;
         }
+        for (UUID playerId : Set.copyOf(glowstoneByPlayer.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline()) restoreGlowstone(player);
+            else glowstoneByPlayer.remove(playerId);
+        }
     }
 
     private void renderAll() {
+        Set<UUID> active = sessions.sessions().keySet();
+        for (UUID playerId : Set.copyOf(glowstoneByPlayer.keySet())) {
+            if (!active.contains(playerId)) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && player.isOnline()) restoreGlowstone(player);
+                else glowstoneByPlayer.remove(playerId);
+            }
+        }
+
         for (Map.Entry<UUID, ClaimSession> entry : sessions.sessions().entrySet()) {
             Player player = Bukkit.getPlayer(entry.getKey());
-            if (player == null || !player.isOnline()) {
-                continue;
-            }
+            if (player == null || !player.isOnline()) continue;
             render(player, entry.getValue());
         }
     }
@@ -51,17 +70,21 @@ public final class ClaimPreviewRenderer {
     private void render(Player player, ClaimSession session) {
         World world = Bukkit.getWorld(session.worldId());
         if (world == null || !player.getWorld().getUID().equals(world.getUID())) {
+            restoreGlowstone(player);
             player.sendActionBar(Component.text("Return to the claim world to continue.", NamedTextColor.RED));
             return;
         }
 
         List<ClaimPoint> raw = session.points();
         if (raw.isEmpty()) {
+            restoreGlowstone(player);
             player.sendActionBar(Component.text("Right-click the first corner.", NamedTextColor.YELLOW));
             return;
         }
 
         ClaimGeometry geometry = session.geometry(world);
+        syncGlowstone(player, session, geometry, raw);
+
         ClaimValidation validation = geometry == null ? null : sessions.validation(player, session);
         Color color = !session.closed() ? Color.fromRGB(249, 195, 73)
                 : validation != null && validation.valid() ? Color.fromRGB(143, 175, 126)
@@ -93,21 +116,15 @@ public final class ClaimPreviewRenderer {
             }
         }
 
-        if (session.closed()) {
-            drawSparseFill(player, geometry, baseY + 0.05, dust);
-        }
+        if (session.closed()) drawSparseFill(player, geometry, baseY + 0.05, dust);
 
         String dimensions;
         if (session.shape() == ClaimShape.RECTANGLE) {
             dimensions = geometry.width() + " x " + geometry.length();
-            if (!geometry.fullHeight()) {
-                dimensions += " x " + geometry.height();
-            }
+            if (!geometry.fullHeight()) dimensions += " x " + geometry.height();
         } else {
             dimensions = geometry.vertices().size() + " points | " + geometry.width() + " x " + geometry.length();
-            if (!geometry.fullHeight()) {
-                dimensions += " x " + geometry.height();
-            }
+            if (!geometry.fullHeight()) dimensions += " x " + geometry.height();
         }
         String status = !session.closed() ? "Click the first point to close"
                 : validation != null && validation.valid() ? "Ready to confirm"
@@ -116,6 +133,71 @@ public final class ClaimPreviewRenderer {
                 ? NamedTextColor.RED : NamedTextColor.WHITE;
         player.sendActionBar(Component.text(dimensions + " | " + geometry.blockAreaEstimate() + " blocks² | " + status,
                 textColor));
+    }
+
+    private void syncGlowstone(Player player, ClaimSession session, ClaimGeometry geometry, List<ClaimPoint> raw) {
+        World world = player.getWorld();
+        Set<PreviewBlock> next = new HashSet<>();
+        List<ClaimPoint> points = geometry == null ? raw : geometry.vertices();
+
+        if (points.size() == 1) {
+            addMarker(next, world, session, points.getFirst().x(), points.getFirst().z());
+        } else {
+            int edgeCount = geometry == null || !session.closed() ? points.size() - 1 : points.size();
+            for (int i = 0; i < edgeCount && next.size() < MAX_GLOWSTONE_MARKERS; i++) {
+                ClaimPoint from = points.get(i);
+                ClaimPoint to = points.get((i + 1) % points.size());
+                addEdgeMarkers(next, world, session, from, to);
+            }
+        }
+
+        Set<PreviewBlock> previous = glowstoneByPlayer.getOrDefault(player.getUniqueId(), Set.of());
+        for (PreviewBlock marker : previous) {
+            if (!next.contains(marker)) restore(player, marker);
+        }
+        for (PreviewBlock marker : next) {
+            if (!previous.contains(marker)) {
+                player.sendBlockChange(new Location(world, marker.x(), marker.y(), marker.z()),
+                        Material.GLOWSTONE.createBlockData());
+            }
+        }
+
+        if (next.isEmpty()) glowstoneByPlayer.remove(player.getUniqueId());
+        else glowstoneByPlayer.put(player.getUniqueId(), next);
+    }
+
+    private void addEdgeMarkers(Set<PreviewBlock> markers, World world, ClaimSession session,
+                                ClaimPoint from, ClaimPoint to) {
+        double dx = to.x() - from.x();
+        double dz = to.z() - from.z();
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        int steps = Math.max(1, (int) Math.ceil(distance));
+        for (int i = 0; i <= steps && markers.size() < MAX_GLOWSTONE_MARKERS; i++) {
+            double t = i / (double) steps;
+            int x = (int) Math.round(from.x() + dx * t);
+            int z = (int) Math.round(from.z() + dz * t);
+            addMarker(markers, world, session, x, z);
+        }
+    }
+
+    private void addMarker(Set<PreviewBlock> markers, World world, ClaimSession session, int x, int z) {
+        int y = session.fullHeight()
+                ? Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt(x, z) + 1)
+                : Math.max(world.getMinHeight(), Math.min(world.getMaxHeight() - 2, session.minY()));
+        markers.add(new PreviewBlock(world.getUID(), x, y, z));
+    }
+
+    private void restoreGlowstone(Player player) {
+        Set<PreviewBlock> previous = glowstoneByPlayer.remove(player.getUniqueId());
+        if (previous == null) return;
+        for (PreviewBlock marker : previous) restore(player, marker);
+    }
+
+    private void restore(Player player, PreviewBlock marker) {
+        World world = Bukkit.getWorld(marker.worldId());
+        if (world == null || !player.getWorld().getUID().equals(marker.worldId())) return;
+        Location location = new Location(world, marker.x(), marker.y(), marker.z());
+        player.sendBlockChange(location, location.getBlock().getBlockData());
     }
 
     private void drawPolygon(Player player, List<ClaimPoint> points, double y, Particle.DustOptions dust) {
@@ -158,11 +240,12 @@ public final class ClaimPreviewRenderer {
         for (int x = geometry.minX(); x <= geometry.maxX() && emitted < cap; x += step) {
             for (int z = geometry.minZ(); z <= geometry.maxZ() && emitted < cap; z += step) {
                 if (geometry.contains2D(x, z)) {
-                    player.spawnParticle(Particle.DUST, x + 0.5, y, z + 0.5,
-                            1, 0, 0, 0, 0, dust);
+                    player.spawnParticle(Particle.DUST, x + 0.5, y, z + 0.5, 1, 0, 0, 0, 0, dust);
                     emitted++;
                 }
             }
         }
     }
+
+    private record PreviewBlock(UUID worldId, int x, int y, int z) {}
 }
