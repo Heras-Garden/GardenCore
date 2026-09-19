@@ -46,6 +46,7 @@ claims:
     units: 100
 
   home-blocks:
+    territory-founder-earning-multiplier: 1.2
     starting: 50
     minutes-per-award: 30
     blocks-per-award: 1

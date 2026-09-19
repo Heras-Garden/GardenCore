@@ -62,11 +62,14 @@ public final class ClaimProfileService implements ClaimBlockService {
         Profile before = profile(playerId);
         long newMinutes = before.playMinutes() + minutes;
         long earned = before.earnedBlocks();
-        if (!before.earningLocked()) {
-            long interval = Math.max(1L, plugin.getConfig().getLong("claims.home-blocks.minutes-per-award", 30L));
-            long perAward = Math.max(1L, plugin.getConfig().getLong("claims.home-blocks.blocks-per-award", 1L));
-            earned += Math.max(0L, newMinutes / interval - before.playMinutes() / interval) * perAward;
-        }
+        long interval = Math.max(1L, plugin.getConfig().getLong("claims.home-blocks.minutes-per-award", 30L));
+        long perAward = Math.max(1L, plugin.getConfig().getLong("claims.home-blocks.blocks-per-award", 1L));
+        double multiplier = claims.hasFoundedTerritory(playerId)
+                ? Math.max(1.0D, plugin.getConfig().getDouble("claims.home-blocks.territory-founder-earning-multiplier", 1.2D))
+                : 1.0D;
+        long oldAwards = (long) Math.floor((before.playMinutes() / (double) interval) * multiplier);
+        long newAwards = (long) Math.floor((newMinutes / (double) interval) * multiplier);
+        earned += Math.max(0L, newAwards - oldAwards) * perAward;
         long now = System.currentTimeMillis();
         try (Connection connection = database.connection();
              PreparedStatement statement = connection.prepareStatement(

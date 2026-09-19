@@ -1,5 +1,6 @@
 package com.herasgarden.gardencore.claim;
 
+import com.herasgarden.gardencore.api.land.GardenCitizenshipDirectory;
 import com.herasgarden.gardencore.organization.Organization;
 import com.herasgarden.gardencore.organization.OrganizationPermission;
 import com.herasgarden.gardencore.organization.OrganizationService;
@@ -13,10 +14,12 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import com.herasgarden.gardencore.ui.ClaimChatUi;
 import com.herasgarden.gardencore.util.Messages;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.RegisteredServiceProvider;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -29,15 +32,18 @@ public final class ClaimCommand {
     private final TerritoryService territories;
     private final PropertyService properties;
     private final ClaimProfileService profiles;
+    private final ClaimPreviewRenderer previews;
 
     public ClaimCommand(ClaimService claims, ClaimSessionManager sessions, OrganizationService organizations,
-                        TerritoryService territories, PropertyService properties, ClaimProfileService profiles) {
+                        TerritoryService territories, PropertyService properties, ClaimProfileService profiles,
+                        ClaimPreviewRenderer previews) {
         this.claims = claims;
         this.sessions = sessions;
         this.organizations = organizations;
         this.territories = territories;
         this.properties = properties;
         this.profiles = profiles;
+        this.previews = previews;
     }
 
     public boolean handle(CommandSender sender, Command command, String label, String[] args) {
@@ -410,6 +416,7 @@ public final class ClaimCommand {
 
     private boolean delete(Player player, String[] args) {
         if (args.length >= 3 && args[2].equalsIgnoreCase("cancel")) {
+            previews.stopDeletionPreview(player);
             Messages.send(player, "Claim deletion cancelled.");
             return true;
         }
@@ -437,7 +444,10 @@ public final class ClaimCommand {
             }
 
             try {
+                previews.stopDeletionPreview(player);
                 String label = claimLabel(claim);
+                List<java.util.UUID> formerCitizens = claim.type() == ClaimType.TERRITORY
+                        ? territoryCitizens(claim) : List.of();
                 SqlProperty property = properties.getByClaim(claim.id());
                 if (property != null) {
                     properties.deleteProperty(property);
@@ -447,6 +457,7 @@ public final class ClaimCommand {
                     }
                     claims.delete(claim);
                 }
+                if (claim.type() == ClaimType.TERRITORY) clearFormerCitizens(formerCitizens, claim);
                 Messages.send(player, "Deleted " + label + ".");
             } catch (IllegalArgumentException exception) {
                 Messages.send(player, exception.getMessage());
@@ -481,6 +492,7 @@ public final class ClaimCommand {
             return true;
         }
 
+        previews.startDeletionPreview(player, claim);
         Component prompt = Messages.prefix()
                 .append(Component.text("Delete " + claimLabel(claim) + "? This cannot be undone.", NamedTextColor.WHITE))
                 .append(Component.newline())
@@ -492,6 +504,32 @@ public final class ClaimCommand {
                         .clickEvent(ClickEvent.runCommand("/claim delete cancel")));
         player.sendMessage(prompt);
         return true;
+    }
+
+    private List<java.util.UUID> territoryCitizens(Claim claim) {
+        RegisteredServiceProvider<GardenCitizenshipDirectory> registration =
+                Bukkit.getServicesManager().getRegistration(GardenCitizenshipDirectory.class);
+        if (registration == null || registration.getProvider() == null) return List.of();
+        return registration.getProvider().citizens(claim.id());
+    }
+
+    private void clearFormerCitizens(List<java.util.UUID> citizens, Claim claim) {
+        RegisteredServiceProvider<GardenCitizenshipDirectory> registration =
+                Bukkit.getServicesManager().getRegistration(GardenCitizenshipDirectory.class);
+        if (registration == null || registration.getProvider() == null) return;
+        GardenCitizenshipDirectory directory = registration.getProvider();
+        String name = claim.name() == null || claim.name().isBlank() ? "your territory" : claim.name();
+        for (java.util.UUID citizenId : citizens) {
+            try {
+                directory.clearCitizenship(citizenId);
+                Player online = Bukkit.getPlayer(citizenId);
+                if (online != null && online.isOnline()) {
+                    Messages.send(online, name + " was dissolved. Your citizenship and territory flag were removed.");
+                }
+            } catch (SQLException exception) {
+                Bukkit.getLogger().warning("Could not clear citizenship for " + citizenId + " after territory deletion.");
+            }
+        }
     }
 
     private Claim findByIdPrefix(String token) {

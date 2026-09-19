@@ -6,7 +6,7 @@ author: Hera's Garden
 website: https://herasgarden.net
 description: Shared platform systems for The Garden SMP, including Obols, claims, organizations, storage, and integrations.
 depend: [Vault]
-softdepend: [Essentials, WorldGuard]
+softdepend: [Essentials, WorldGuard, MarriageMaster]
 
 commands:
   obol:
@@ -23,6 +23,13 @@ commands:
   company:
     description: Manage GardenCore companies without typing /garden.
     usage: /company <create|info|list>
+  adminclaim:
+    description: Quickly create and manage administrator land claims.
+    usage: /adminclaim <start|info|settings|delete>
+    permission: gardencore.claim.admin
+  horse:
+    description: Manage who may ride your tamed horse.
+    usage: /horse <info|access|trust|untrust>
 
 permissions:
   gardencore.obol:

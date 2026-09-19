@@ -10,6 +10,7 @@ import com.herasgarden.gardencore.api.order.OrderService;
 import com.herasgarden.gardencore.api.organization.OrganizationDirectory;
 import com.herasgarden.gardencore.api.land.PropertyManagementService;
 import com.herasgarden.gardencore.api.storage.GardenStorage;
+import com.herasgarden.gardencore.api.social.MarriageDirectory;
 import com.herasgarden.gardencore.claim.*;
 import com.herasgarden.gardencore.database.ClaimRepository;
 import com.herasgarden.gardencore.database.DatabaseManager;
@@ -36,6 +37,10 @@ import com.herasgarden.gardencore.property.PropertySignListener;
 import com.herasgarden.gardencore.property.PropertyService;
 import com.herasgarden.gardencore.territory.TerritoryRepository;
 import com.herasgarden.gardencore.territory.TerritoryService;
+import com.herasgarden.gardencore.social.MarriageMasterIntegration;
+import com.herasgarden.gardencore.horse.HorseAccessListener;
+import com.herasgarden.gardencore.horse.HorseCommand;
+import com.herasgarden.gardencore.claim.AdminClaimCommand;
 import com.herasgarden.gardencore.worldguard.WorldGuardHook;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.command.PluginCommand;
@@ -74,6 +79,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     private ClaimOwnershipBridge claimOwnershipBridge;
     private OrganizationDirectory organizationDirectory;
     private PropertyManagementService propertyManagementService;
+    private MarriageMasterIntegration marriageIntegration;
 
     @Override
     public void onEnable() {
@@ -93,6 +99,10 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getServicesManager().register(OrganizationDirectory.class, organizationDirectory, this, ServicePriority.Normal);
         getServer().getServicesManager().register(
                 PropertyManagementService.class, propertyManagementService, this, ServicePriority.Normal);
+        marriageIntegration = new MarriageMasterIntegration(this);
+        claimService.setMarriageDirectory(marriageIntegration);
+        getServer().getServicesManager().register(
+                MarriageDirectory.class, marriageIntegration, this, ServicePriority.Normal);
 
         obolService = new ObolService(this, economy);
 
@@ -125,8 +135,12 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             obolCommand.setTabCompleter(obolExecutor);
         }
 
+        claimPreviewRenderer = new ClaimPreviewRenderer(this, claimSessionManager);
+        claimPreviewRenderer.start();
+
         ClaimCommand claimCommand = new ClaimCommand(
-                claimService, claimSessionManager, organizationService, territoryService, propertyService, claimProfileService);
+                claimService, claimSessionManager, organizationService, territoryService, propertyService,
+                claimProfileService, claimPreviewRenderer);
         CompanyCommand companyCommand = new CompanyCommand(organizationService);
         GardenCommand gardenCommand = new GardenCommand(claimCommand, companyCommand);
         PluginCommand command = getCommand("garden");
@@ -135,6 +149,12 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             command.setTabCompleter(gardenCommand);
         }
         registerShortCommand("claim", gardenCommand, "claim");
+        PluginCommand adminClaim = getCommand("adminclaim");
+        if (adminClaim != null) {
+            AdminClaimCommand adminExecutor = new AdminClaimCommand(gardenCommand);
+            adminClaim.setExecutor(adminExecutor);
+            adminClaim.setTabCompleter(adminExecutor);
+        }
         // /property is owned by GardenLands. /garden property remains as a
         // temporary compatibility path while sign/storage code is extracted.
         registerShortCommand("company", gardenCommand, "company");
@@ -146,6 +166,14 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getPluginManager().registerEvents(new ClaimSelectionListener(claimSessionManager), this);
         getServer().getPluginManager().registerEvents(new ClaimProtectionListener(claimService, claimSessionManager), this);
         getServer().getPluginManager().registerEvents(new PlayerClaimProfileListener(claimProfileService), this);
+        HorseAccessListener horseAccess = new HorseAccessListener(this);
+        getServer().getPluginManager().registerEvents(horseAccess, this);
+        PluginCommand horse = getCommand("horse");
+        if (horse != null) {
+            HorseCommand horseCommand = new HorseCommand(this, horseAccess);
+            horse.setExecutor(horseCommand);
+            horse.setTabCompleter(horseCommand);
+        }
 
         long playtimeTicks = 20L * 60L * 5L;
         getServer().getScheduler().runTaskTimer(this, () -> getServer().getOnlinePlayers().forEach(player -> {
@@ -164,9 +192,6 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
                 getLogger().warning("Inactive HOME cleanup failed: " + exception.getMessage());
             }
         }, 20L * 60L, 20L * 60L * 60L * 24L);
-
-        claimPreviewRenderer = new ClaimPreviewRenderer(this, claimSessionManager);
-        claimPreviewRenderer.start();
 
         emeraldOreService = new EmeraldOreService(this);
         emeraldOreService.start();

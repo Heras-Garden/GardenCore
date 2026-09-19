@@ -25,6 +25,8 @@ public final class ClaimPreviewRenderer {
     private final GardenCore plugin;
     private final ClaimSessionManager sessions;
     private final Map<UUID, Set<PreviewBlock>> glowstoneByPlayer = new HashMap<>();
+    private final Map<UUID, BukkitTask> deletionTasks = new HashMap<>();
+    private final Map<UUID, Set<PreviewBlock>> deletionGlowstone = new HashMap<>();
     private BukkitTask task;
 
     public ClaimPreviewRenderer(GardenCore plugin, ClaimSessionManager sessions) {
@@ -47,6 +49,10 @@ public final class ClaimPreviewRenderer {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline()) restoreGlowstone(player);
             else glowstoneByPlayer.remove(playerId);
+        }
+        for (UUID playerId : Set.copyOf(deletionTasks.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) stopDeletionPreview(player);
         }
     }
 
@@ -163,7 +169,14 @@ public final class ClaimPreviewRenderer {
         }
 
         if (next.isEmpty()) glowstoneByPlayer.remove(player.getUniqueId());
-        else glowstoneByPlayer.put(player.getUniqueId(), next);
+        else {
+            glowstoneByPlayer.put(player.getUniqueId(), next);
+            if (previous.isEmpty()) {
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (player.isOnline()) restoreGlowstone(player);
+                }, 20L);
+            }
+        }
     }
 
     private void addEdgeMarkers(Set<PreviewBlock> markers, World world, ClaimSession session,
@@ -198,6 +211,67 @@ public final class ClaimPreviewRenderer {
         if (world == null || !player.getWorld().getUID().equals(marker.worldId())) return;
         Location location = new Location(world, marker.x(), marker.y(), marker.z());
         player.sendBlockChange(location, location.getBlock().getBlockData());
+    }
+
+    public void startDeletionPreview(Player player, Claim claim) {
+        stopDeletionPreview(player);
+        Runnable pulse = () -> {
+            if (!player.isOnline()) {
+                stopDeletionPreview(player);
+                return;
+            }
+            Set<PreviewBlock> markers = claimMarkers(player, claim);
+            deletionGlowstone.put(player.getUniqueId(), markers);
+            for (PreviewBlock marker : markers) {
+                World world = Bukkit.getWorld(marker.worldId());
+                if (world != null && player.getWorld().getUID().equals(marker.worldId())) {
+                    player.sendBlockChange(new Location(world, marker.x(), marker.y(), marker.z()),
+                            Material.GLOWSTONE.createBlockData());
+                }
+            }
+            Bukkit.getScheduler().runTaskLater(plugin, () -> restoreDeletionGlowstone(player), 20L);
+        };
+        pulse.run();
+        deletionTasks.put(player.getUniqueId(), Bukkit.getScheduler().runTaskTimer(plugin, pulse, 40L, 40L));
+    }
+
+    public void stopDeletionPreview(Player player) {
+        BukkitTask task = deletionTasks.remove(player.getUniqueId());
+        if (task != null) task.cancel();
+        restoreDeletionGlowstone(player);
+    }
+
+    private void restoreDeletionGlowstone(Player player) {
+        Set<PreviewBlock> markers = deletionGlowstone.remove(player.getUniqueId());
+        if (markers == null) return;
+        for (PreviewBlock marker : markers) restore(player, marker);
+    }
+
+    private Set<PreviewBlock> claimMarkers(Player player, Claim claim) {
+        Set<PreviewBlock> markers = new HashSet<>();
+        World world = Bukkit.getWorld(claim.geometry().worldId());
+        if (world == null || !player.getWorld().getUID().equals(world.getUID())) return markers;
+        List<ClaimPoint> points = claim.geometry().vertices();
+        for (int i = 0; i < points.size() && markers.size() < MAX_GLOWSTONE_MARKERS; i++) {
+            ClaimPoint from = points.get(i);
+            ClaimPoint to = points.get((i + 1) % points.size());
+            double dx = to.x() - from.x();
+            double dz = to.z() - from.z();
+            int steps = Math.max(1, (int) Math.ceil(Math.sqrt(dx * dx + dz * dz)));
+            for (int step = 0; step <= steps && markers.size() < MAX_GLOWSTONE_MARKERS; step++) {
+                double t = step / (double) steps;
+                int x = (int) Math.round(from.x() + dx * t);
+                int z = (int) Math.round(from.z() + dz * t);
+                int y = claim.geometry().fullHeight()
+                        ? Math.min(world.getMaxHeight() - 2, world.getHighestBlockYAt(x, z) + 1)
+                        : claim.geometry().minY();
+                markers.add(new PreviewBlock(world.getUID(), x, y, z));
+                if (!claim.geometry().fullHeight()) {
+                    markers.add(new PreviewBlock(world.getUID(), x, claim.geometry().maxY(), z));
+                }
+            }
+        }
+        return markers;
     }
 
     private void drawPolygon(Player player, List<ClaimPoint> points, double y, Particle.DustOptions dust) {

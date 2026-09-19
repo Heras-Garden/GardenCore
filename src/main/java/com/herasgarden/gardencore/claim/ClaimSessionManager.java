@@ -181,7 +181,7 @@ public final class ClaimSessionManager {
                 UUID governmentId = registration.getProvider().createForTerritory(
                         player, claim.id(), session.territoryName(), session.governmentType());
                 claimService.transferOwner(claim, ClaimOwnerType.GOVERNMENT, governmentId);
-                profiles.lockEarning(player.getUniqueId());
+
             }
 
             sessions.remove(player.getUniqueId());

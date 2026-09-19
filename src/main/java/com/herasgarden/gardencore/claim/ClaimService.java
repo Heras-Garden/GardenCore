@@ -2,6 +2,7 @@ package com.herasgarden.gardencore.claim;
 
 import com.herasgarden.gardencore.GardenCore;
 import com.herasgarden.gardencore.api.claim.ClaimTransferPolicy;
+import com.herasgarden.gardencore.api.social.MarriageDirectory;
 import com.herasgarden.gardencore.api.permission.AccessDecision;
 import com.herasgarden.gardencore.api.permission.ClaimAccessAction;
 import com.herasgarden.gardencore.api.permission.ClaimAccessPolicy;
@@ -25,6 +26,7 @@ public final class ClaimService {
     private final OrganizationService organizations;
     private final Map<UUID, Claim> claims = new ConcurrentHashMap<>();
     private ClaimProfileService profiles;
+    private MarriageDirectory marriages;
 
     public ClaimService(GardenCore plugin, ClaimRepository repository, OrganizationService organizations) {
         this.plugin = plugin;
@@ -34,6 +36,16 @@ public final class ClaimService {
 
     public void setProfiles(ClaimProfileService profiles) {
         this.profiles = profiles;
+    }
+
+    public void setMarriageDirectory(MarriageDirectory marriages) {
+        this.marriages = marriages;
+    }
+
+    public boolean hasFoundedTerritory(UUID playerId) {
+        if (playerId == null) return false;
+        return claims.values().stream()
+                .anyMatch(claim -> claim.type() == ClaimType.TERRITORY && playerId.equals(claim.createdBy()));
     }
 
     public void load() throws SQLException {
@@ -300,7 +312,7 @@ public final class ClaimService {
             return true;
         }
         if (claim.ownerType() == ClaimOwnerType.PLAYER) {
-            return false;
+            return marriages != null && marriages.arePartners(player.getUniqueId(), claim.ownerId());
         }
         Organization organization = organizations.get(claim.ownerId());
         return organization != null && organizations.has(player, organization, OrganizationPermission.CLAIM_MANAGE);
