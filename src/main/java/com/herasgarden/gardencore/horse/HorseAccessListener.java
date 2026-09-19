@@ -2,7 +2,9 @@ package com.herasgarden.gardencore.horse;
 
 import com.herasgarden.gardencore.api.social.MarriageDirectory;
 import com.herasgarden.gardencore.util.Messages;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.AbstractHorse;
 import org.bukkit.entity.AnimalTamer;
@@ -12,6 +14,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -19,6 +22,8 @@ import org.bukkit.event.entity.EntityMountEvent;
 import org.bukkit.event.entity.EntityTameEvent;
 
 import java.util.Arrays;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -29,6 +34,7 @@ public final class HorseAccessListener implements Listener {
     private final JavaPlugin plugin;
     private final NamespacedKey trustedKey;
     private final NamespacedKey nameRequiredKey;
+    private final Map<UUID, UUID> pendingNames = new ConcurrentHashMap<>();
 
     public HorseAccessListener(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -103,11 +109,51 @@ public final class HorseAccessListener implements Listener {
         setPublic(horse, false);
         if (horse.customName() == null) {
             horse.getPersistentDataContainer().set(nameRequiredKey, PersistentDataType.BYTE, (byte) 1);
-            Messages.send(player, "You tamed a horse. Name it with /horse name <name> before riding it.");
+            pendingNames.put(player.getUniqueId(), horse.getUniqueId());
+            Messages.send(player, "You tamed a horse! Type its name in chat now, or type cancel.");
         } else {
             horse.setCustomNameVisible(true);
             horse.getPersistentDataContainer().set(nameRequiredKey, PersistentDataType.BYTE, (byte) 0);
         }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onNameChat(AsyncChatEvent event) {
+        UUID horseId = pendingNames.get(event.getPlayer().getUniqueId());
+        if (horseId == null) return;
+
+        event.setCancelled(true);
+        String name = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+        Player player = event.getPlayer();
+
+        if (name.equalsIgnoreCase("cancel")) {
+            pendingNames.remove(player.getUniqueId());
+            plugin.getServer().getScheduler().runTask(plugin,
+                    () -> Messages.send(player, "Horse naming cancelled. Use /horse name <name> while looking at it later."));
+            return;
+        }
+
+        if (name.isBlank() || name.length() > 32) {
+            plugin.getServer().getScheduler().runTask(plugin,
+                    () -> Messages.send(player, "Horse names must be between 1 and 32 characters. Type another name, or cancel."));
+            return;
+        }
+
+        pendingNames.remove(player.getUniqueId());
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            Entity entity = plugin.getServer().getEntity(horseId);
+            if (!(entity instanceof AbstractHorse horse) || !owns(player, horse)) {
+                Messages.send(player, "That horse is no longer available to name.");
+                return;
+            }
+            nameHorse(horse, name);
+            Messages.send(player, "Your horse is now named " + name + ".");
+        });
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        pendingNames.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
