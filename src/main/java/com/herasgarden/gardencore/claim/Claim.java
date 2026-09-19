@@ -13,6 +13,8 @@ public final class Claim {
     private UUID ownerId;
     private UUID parentId;
     private String name;
+    private ClaimTag tag;
+    private GovernmentType governmentType;
     private final ClaimGeometry geometry;
     private final UUID createdBy;
     private final Instant createdAt;
@@ -20,13 +22,16 @@ public final class Claim {
             new EnumMap<>(ClaimSubject.class);
 
     public Claim(UUID id, ClaimType type, ClaimOwnerType ownerType, UUID ownerId, UUID parentId,
-                 String name, ClaimGeometry geometry, UUID createdBy, Instant createdAt) {
+                 String name, ClaimTag tag, GovernmentType governmentType, ClaimGeometry geometry,
+                 UUID createdBy, Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.type = Objects.requireNonNull(type, "type");
         this.ownerType = Objects.requireNonNull(ownerType, "ownerType");
         this.ownerId = Objects.requireNonNull(ownerId, "ownerId");
         this.parentId = parentId;
         this.name = name;
+        this.tag = tag;
+        this.governmentType = governmentType;
         this.geometry = Objects.requireNonNull(geometry, "geometry");
         this.createdBy = Objects.requireNonNull(createdBy, "createdBy");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
@@ -38,6 +43,8 @@ public final class Claim {
     public UUID ownerId() { return ownerId; }
     public UUID parentId() { return parentId; }
     public String name() { return name; }
+    public ClaimTag tag() { return tag; }
+    public GovernmentType governmentType() { return governmentType; }
     public ClaimGeometry geometry() { return geometry; }
     public UUID createdBy() { return createdBy; }
     public Instant createdAt() { return createdAt; }
@@ -57,6 +64,14 @@ public final class Claim {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public void setTag(ClaimTag tag) {
+        this.tag = tag;
+    }
+
+    public void setGovernmentType(GovernmentType governmentType) {
+        this.governmentType = governmentType;
     }
 
     public PermissionValue permission(ClaimSubject subject, ClaimPermission permission) {
