@@ -37,13 +37,13 @@ public final class ClaimSelectionListener implements Listener {
             return;
         }
 
-        if (session.type() == ClaimType.APARTMENT && session.awaitingApartmentHeightClick()) {
-            ClaimSession.ApartmentHeightResult heightResult = session.selectApartmentHeight(event.getClickedBlock().getY());
-            if (heightResult == ClaimSession.ApartmentHeightResult.CEILING_SET) {
+        if (session.type() == ClaimType.UNIT && session.awaitingUnitHeightClick()) {
+            ClaimSession.UnitHeightResult heightResult = session.selectUnitHeight(event.getClickedBlock().getY());
+            if (heightResult == ClaimSession.UnitHeightResult.CEILING_SET) {
                 Messages.send(player, "Ceiling set at Y " + event.getClickedBlock().getY() + ". Now right-click the floor.");
-            } else if (heightResult == ClaimSession.ApartmentHeightResult.COMPLETE) {
+            } else if (heightResult == ClaimSession.UnitHeightResult.COMPLETE) {
                 Messages.send(player, "Floor set at Y " + event.getClickedBlock().getY()
-                        + ". Apartment height is " + session.minY() + " to " + session.maxY() + ".");
+                        + ". Unit height is " + session.minY() + " to " + session.maxY() + ".");
             }
             sessions.showPreview(player);
             return;
@@ -66,9 +66,9 @@ public final class ClaimSelectionListener implements Listener {
                 ClaimValidation validation = sessions.validation(player, session);
                 ClaimChatUi.sendPreviewSummary(player, session, geometry, validation);
                 ClaimChatUi.sendSelectionControls(player, session, validation);
-                if (session.type() == ClaimType.APARTMENT) {
+                if (session.type() == ClaimType.UNIT) {
                     Messages.send(player, "Boundary closed. Right-click the ceiling, then right-click the floor.");
-                    ClaimChatUi.sendApartmentHeightPrompt(player, session);
+                    ClaimChatUi.sendUnitHeightPrompt(player, session);
                 } else if (session.type() == ClaimType.TERRITORY) {
                     ClaimChatUi.sendTerritorySetup(player, session);
                 }

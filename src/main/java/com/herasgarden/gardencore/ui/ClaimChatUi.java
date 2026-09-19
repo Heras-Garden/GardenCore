@@ -11,11 +11,11 @@ import org.bukkit.entity.Player;
 
 public final class ClaimChatUi {
     private static final TextColor PREFIX = Messages.PREFIX_COLOR;
-    private static final TextColor TEXT = TextColor.color(0xE7E3E5);
-    private static final TextColor MUTED = TextColor.color(0xB9B4B6);
-    private static final TextColor ACCENT = TextColor.color(0xC7A6B4);
-    private static final TextColor POSITIVE = TextColor.color(0xA8B79F);
-    private static final TextColor NEGATIVE = TextColor.color(0xC5A3A3);
+    private static final TextColor TEXT = TextColor.color(0xFFFFFF);
+    private static final TextColor MUTED = TextColor.color(0xD6D1D4);
+    private static final TextColor ACCENT = TextColor.color(0xF2AFC8);
+    private static final TextColor POSITIVE = TextColor.color(0xA8E6A3);
+    private static final TextColor NEGATIVE = TextColor.color(0xFF9191);
 
     private ClaimChatUi() {}
 
@@ -31,15 +31,15 @@ public final class ClaimChatUi {
                     .append(button("Undo Point", "/claim undo", ACCENT, "Remove the last corner."))
                     .append(Component.space())
                     .append(button("Settings", "/claim settings", ACCENT, "Claim preview settings."));
-            if (session.type() == ClaimType.CITY || session.type() == ClaimType.DISTRICT) {
+            if (session.type() == session.type() == ClaimType.DISTRICT) {
                 line.append(Component.space())
                         .append(suggestButton("Set Name", "/claim name ", ACCENT,
-                                "Set the city or district name before confirming."));
+                                "Set the district name before confirming."));
             }
-            if (session.type() == ClaimType.CITY || session.type() == ClaimType.DISTRICT) {
+            if (session.type() == session.type() == ClaimType.DISTRICT) {
                 line.append(Component.space())
                         .append(suggestButton("Set Name", "/claim name ", ACCENT,
-                                "Set the city or district name before confirming."));
+                                "Set the district name before confirming."));
             }
             if (session.type() == ClaimType.TERRITORY) {
                 line.append(Component.space())
@@ -102,8 +102,8 @@ public final class ClaimChatUi {
                 .append(Component.text("Height: " + height, MUTED))
                 .append(Component.newline());
 
-        if (session.type() == ClaimType.APARTMENT) {
-            menu.append(Component.text("Apartment height is selected by right-clicking the ceiling, then the floor.", MUTED))
+        if (session.type() == ClaimType.UNIT) {
+            menu.append(Component.text("Unit height is selected by right-clicking the ceiling, then the floor.", MUTED))
                     .append(Component.newline())
                     .append(button("Reset Height", "/claim height reset", ACCENT,
                             "Start the ceiling and floor selection again."))
@@ -122,7 +122,7 @@ public final class ClaimChatUi {
     }
 
     public static void sendApartmentHeightPrompt(Player player, ClaimSession session) {
-        if (session.type() != ClaimType.APARTMENT || !session.closed()) {
+        if (session.type() != ClaimType.UNIT || !session.closed()) {
             return;
         }
         String instruction = switch (session.apartmentHeightStep()) {
@@ -130,7 +130,7 @@ public final class ClaimChatUi {
             case FLOOR -> "Ceiling set. Right-click the floor.";
             case DONE -> "Height set: Y " + session.minY() + " to " + session.maxY() + ".";
         };
-        player.sendActionBar(Component.text("Apartment height | " + instruction, MUTED));
+        player.sendActionBar(Component.text("Unit height | " + instruction, MUTED));
 
         Component line = prefix()
                 .append(Component.text(instruction, TEXT));

@@ -154,6 +154,16 @@ public final class ClaimRepository {
         }
     }
 
+    public void updateParent(UUID claimId, UUID parentId) throws SQLException {
+        try (Connection connection = database.connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE gc_claims SET parent_uuid = ? WHERE claim_uuid = ?")) {
+            statement.setString(1, parentId == null ? null : parentId.toString());
+            statement.setString(2, claimId.toString());
+            if (statement.executeUpdate() != 1) throw new SQLException("Claim parent update affected no rows for " + claimId);
+        }
+    }
+
     public void updateOwner(UUID claimId, ClaimOwnerType ownerType, UUID ownerId) throws SQLException {
         try (Connection connection = database.connection();
              PreparedStatement statement = connection.prepareStatement(

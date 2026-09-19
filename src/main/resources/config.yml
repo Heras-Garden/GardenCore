@@ -34,12 +34,25 @@ claims:
   minimum-area: 4
   maximum-vertices: 64
 
-  # These are starting limits and can be changed later without rebuilding GardenCore.
+  # Claim-count limits. Government-owned claims are unlimited.
   player-limits:
+    homes: 5
+    properties: 25
+    units: 50
     territories: 1
-    major-properties: 3
-    apartments: 5
-    shops: 15
+
+  company-limits:
+    properties: 50
+    units: 100
+
+  home-blocks:
+    starting: 50
+    minutes-per-award: 30
+    blocks-per-award: 1
+    purchase-price-per-block: 1
+
+  inactivity:
+    unprotected-home-days: 90
 
   territory:
     minimum-area: 10000

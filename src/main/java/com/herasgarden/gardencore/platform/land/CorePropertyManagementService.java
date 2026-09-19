@@ -114,13 +114,13 @@ public final class CorePropertyManagementService implements PropertyManagementSe
             throw new IllegalArgumentException("That Garden claim no longer exists.");
         }
         if (claim.type() == ClaimType.TERRITORY
-                || claim.type() == ClaimType.CITY
                 || claim.type() == ClaimType.DISTRICT
-                || claim.type() == ClaimType.GOVERNMENT
-                || claim.type() == ClaimType.COMPANY
                 || claim.type() == ClaimType.PROTECTED) {
-            throw new IllegalArgumentException(
-                    "Register the address on a property/building/unit claim, not an administrative claim.");
+            throw new IllegalArgumentException("Territory, district, and protected claims do not use property addresses.");
+        }
+        if (claim.type() == ClaimType.UNIT
+                && claim.tag() == com.herasgarden.gardencore.claim.ClaimTag.HOTEL_ROOM) {
+            throw new IllegalArgumentException("Hotel rooms are temporary units and do not have registered addresses.");
         }
         return view(properties.register(claim, road, number, unitLabel));
     }

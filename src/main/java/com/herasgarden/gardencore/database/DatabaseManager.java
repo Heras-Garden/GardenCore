@@ -248,8 +248,8 @@ public final class DatabaseManager implements AutoCloseable {
 
     private void migrateToV5() throws SQLException {
         try (Connection connection = connection(); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("ALTER TABLE gc_claims ADD COLUMN claim_tag VARCHAR(32) NULL");
-            statement.executeUpdate("ALTER TABLE gc_claims ADD COLUMN government_type VARCHAR(32) NULL");
+            ensureColumn(connection, "gc_claims", "claim_tag", "ALTER TABLE gc_claims ADD COLUMN claim_tag VARCHAR(32) NULL");
+            ensureColumn(connection, "gc_claims", "government_type", "ALTER TABLE gc_claims ADD COLUMN government_type VARCHAR(32) NULL");
 
             statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'SHOP', claim_type = 'PROPERTY' WHERE claim_type = 'SHOP'");
             statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'FARM', claim_type = 'PROPERTY' WHERE claim_type = 'FARM'");
@@ -273,6 +273,15 @@ public final class DatabaseManager implements AutoCloseable {
                     + "earning_locked INTEGER NOT NULL DEFAULT 0,"
                     + "last_seen BIGINT NOT NULL,"
                     + "updated_at BIGINT NOT NULL)");
+        }
+    }
+
+    private void ensureColumn(Connection connection, String table, String column, String ddl) throws SQLException {
+        try (ResultSet result = connection.getMetaData().getColumns(null, null, table, column)) {
+            if (result.next()) return;
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate(ddl);
         }
     }
 

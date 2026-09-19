@@ -28,14 +28,16 @@ public final class ClaimCommand {
     private final OrganizationService organizations;
     private final TerritoryService territories;
     private final PropertyService properties;
+    private final ClaimProfileService profiles;
 
     public ClaimCommand(ClaimService claims, ClaimSessionManager sessions, OrganizationService organizations,
-                        TerritoryService territories, PropertyService properties) {
+                        TerritoryService territories, PropertyService properties, ClaimProfileService profiles) {
         this.claims = claims;
         this.sessions = sessions;
         this.organizations = organizations;
         this.territories = territories;
         this.properties = properties;
+        this.profiles = profiles;
     }
 
     public boolean handle(CommandSender sender, Command command, String label, String[] args) {
@@ -59,6 +61,9 @@ public final class ClaimCommand {
             case "height" -> height(player, args);
             case "name" -> name(player, args);
             case "territory" -> territory(player, args);
+            case "tag" -> tag(player, args);
+            case "blocks" -> blocks(player);
+            case "buyblocks" -> buyBlocks(player, args);
             case "info" -> info(player);
             case "permission" -> permission(player, args);
             case "delete" -> delete(player, args);
@@ -67,88 +72,65 @@ public final class ClaimCommand {
     }
 
     private boolean start(Player player, String[] args) {
-        if (!player.hasPermission("gardencore.claim")) {
-            Messages.send(player, "You do not have permission to create claims.");
-            return true;
-        }
-        if (args.length < 3) {
-            Messages.send(player, "Use /claim start <type> [company|government <name>].");
-            return true;
-        }
+        if (!player.hasPermission("gardencore.claim")) { Messages.send(player, "You do not have permission to create claims."); return true; }
+        if (args.length < 3) { Messages.send(player, "Use /claim start <home|property|unit|territory|district|protected>."); return true; }
+        ClaimType type = parseType(args[2]);
+        if (type == null) { Messages.send(player, "Unknown claim type."); return true; }
 
         ClaimOwnerType ownerType = ClaimOwnerType.PLAYER;
         java.util.UUID ownerId = player.getUniqueId();
         String ownerLabel = player.getName();
+        ClaimTag tag = null;
+        GovernmentType governmentType = null;
+        int cursor = 3;
 
-        ClaimType type;
-        String organizationKeyword = null;
-        int organizationNameStart = -1;
-
-        if (args[2].equalsIgnoreCase("company") || args[2].equalsIgnoreCase("government")) {
-            if (args.length < 5) {
-                Messages.send(player, "Use /claim start <type> " + args[2].toLowerCase(Locale.ROOT) + " <name>.");
-                return true;
-            }
-            organizationKeyword = args[2];
-            type = parseType(args[3]);
-            organizationNameStart = 4;
-        } else {
-            type = parseType(args[2]);
-            if (args.length >= 4
-                    && (args[3].equalsIgnoreCase("company") || args[3].equalsIgnoreCase("government"))) {
-                if (args.length < 5) {
-                    Messages.send(player, "Use /claim start " + args[2].toLowerCase(Locale.ROOT) + " "
-                            + args[3].toLowerCase(Locale.ROOT) + " <name>.");
-                    return true;
-                }
-                organizationKeyword = args[3];
-                organizationNameStart = 4;
-            }
+        if (type == ClaimType.UNIT) {
+            if (args.length <= cursor) { Messages.send(player, "Use /claim start unit <apartment|hotel_room|office|shop_unit|storage>."); return true; }
+            try { tag = ClaimTag.parse(args[cursor++]); } catch (IllegalArgumentException e) { Messages.send(player, "Unknown unit tag."); return true; }
+            if (tag == null || !tag.supports(ClaimType.UNIT)) { Messages.send(player, "Choose a valid unit tag."); return true; }
+        } else if (type == ClaimType.PROPERTY && args.length > cursor
+                && !args[cursor].equalsIgnoreCase("company") && !args[cursor].equalsIgnoreCase("government")) {
+            try {
+                ClaimTag candidate = ClaimTag.parse(args[cursor]);
+                if (candidate != null && candidate.supports(ClaimType.PROPERTY)) { tag = candidate; cursor++; }
+            } catch (IllegalArgumentException ignored) {}
+        } else if (type == ClaimType.TERRITORY) {
+            if (args.length <= cursor) { Messages.send(player, "Use /claim start territory <council|mayor|monarchy|direct_democracy|custom>."); return true; }
+            governmentType = GovernmentType.parse(args[cursor++]);
+            if (governmentType == null) { Messages.send(player, "Unknown government type."); return true; }
         }
 
-        if (type == null) {
-            Messages.send(player, "Unknown claim type.");
-            return true;
-        }
-
-        if (organizationKeyword != null) {
-            OrganizationType organizationType = organizationKeyword.equalsIgnoreCase("company")
-                    ? OrganizationType.COMPANY : OrganizationType.GOVERNMENT;
-            String organizationName = join(args, organizationNameStart);
-            Organization organization = organizations.find(organizationType, organizationName);
-            if (organization == null) {
-                Messages.send(player, "That " + organizationType.name().toLowerCase(Locale.ROOT) + " does not exist.");
-                return true;
+        if (args.length > cursor && (args[cursor].equalsIgnoreCase("company") || args[cursor].equalsIgnoreCase("government"))) {
+            if (type == ClaimType.TERRITORY) { Messages.send(player, "A new territory creates its government when confirmed."); return true; }
+            String keyword = args[cursor++];
+            if (args.length <= cursor) { Messages.send(player, "Enter the " + keyword.toLowerCase(Locale.ROOT) + " name."); return true; }
+            OrganizationType organizationType = keyword.equalsIgnoreCase("company") ? OrganizationType.COMPANY : OrganizationType.GOVERNMENT;
+            Organization organization = organizations.find(organizationType, join(args, cursor));
+            if (organization == null) { Messages.send(player, "That " + organizationType.name().toLowerCase(Locale.ROOT) + " does not exist."); return true; }
+            if (!organizations.has(player, organization, OrganizationPermission.CLAIM_CREATE) && !player.hasPermission("gardencore.claim.admin")) {
+                Messages.send(player, "Your position does not allow you to create claims for " + organization.name() + "."); return true;
             }
-            if (!organizations.has(player, organization, OrganizationPermission.CLAIM_CREATE)
-                    && !player.hasPermission("gardencore.claim.admin")) {
-                Messages.send(player, "Your position does not allow you to create claims for " + organization.name() + ".");
-                return true;
-            }
-            ownerType = organizationType == OrganizationType.COMPANY
-                    ? ClaimOwnerType.COMPANY : ClaimOwnerType.GOVERNMENT;
+            ownerType = organizationType == OrganizationType.COMPANY ? ClaimOwnerType.COMPANY : ClaimOwnerType.GOVERNMENT;
             ownerId = organization.id();
             ownerLabel = organization.name();
         }
 
         if (type == ClaimType.TERRITORY && !player.hasPermission("gardencore.claim.territory")) {
-            Messages.send(player, "You do not have permission to create a territory claim yet.");
-            return true;
+            Messages.send(player, "You do not have permission to found a territory yet."); return true;
+        }
+        if (type == ClaimType.PROTECTED && !player.hasPermission("gardencore.claim.admin")) {
+            Messages.send(player, "Protected claims are reserved for administrators."); return true;
         }
 
-        ClaimSession session = sessions.start(player, type, ownerType, ownerId);
+        ClaimSession session = sessions.start(player, type, ownerType, ownerId, tag, governmentType);
         Messages.send(player, "Claim started: " + pretty(type) + " for " + ownerLabel + ". Right-click the first corner.");
-        if (session.shape() == ClaimShape.POLYGON) {
-            Messages.send(player, "Select at least three points, then click the first point again to close the boundary.");
-        } else {
-            Messages.send(player, "Select two opposite corners, then click the first point again to close the boundary.");
-        }
-        if (type == ClaimType.APARTMENT) {
-            Messages.send(player, "After the apartment boundary is closed, right-click the ceiling, then right-click the floor.");
-        }
+        if (tag != null) Messages.send(player, "Tag: " + tag.name().toLowerCase(Locale.ROOT) + ".");
+        if (session.shape() == ClaimShape.POLYGON) Messages.send(player, "Select at least three points, then click the first point again to close the boundary.");
+        else Messages.send(player, "Select two opposite corners, then click the first point again to close the boundary.");
+        if (type == ClaimType.UNIT) Messages.send(player, "After closing the unit boundary, right-click the ceiling, then the floor.");
         ClaimChatUi.sendSelectionControls(player, session, null);
         if (type == ClaimType.TERRITORY) {
-            Messages.send(player, "A territory also needs a unique name and a banner flag. Hold the banner you want to use as the flag.");
+            Messages.send(player, "Government type: " + governmentType.displayName() + ". Set the territory name and banner flag.");
             ClaimChatUi.sendTerritorySetup(player, session);
         }
         return true;
@@ -157,11 +139,11 @@ public final class ClaimCommand {
     private boolean name(Player player, String[] args) {
         ClaimSession session = sessions.get(player);
         if (session == null) {
-            Messages.send(player, "Start a city or district claim first.");
+            Messages.send(player, "Start a district claim first.");
             return true;
         }
-        if (session.type() != ClaimType.CITY && session.type() != ClaimType.DISTRICT) {
-            Messages.send(player, "/claim name is only used while creating a city or district.");
+        if (session.type() != ClaimType.DISTRICT) {
+            Messages.send(player, "/claim name is only used while creating a district.");
             return true;
         }
         if (args.length < 3) {
@@ -171,7 +153,7 @@ public final class ClaimCommand {
 
         String name = join(args, 2).trim();
         if (name.length() < 3 || name.length() > 48) {
-            Messages.send(player, "City and district names must be between 3 and 48 characters.");
+            Messages.send(player, "District names must be between 3 and 48 characters.");
             return true;
         }
 
@@ -328,6 +310,47 @@ public final class ClaimCommand {
         return true;
     }
 
+    private boolean tag(Player player, String[] args) {
+        ClaimSession session = sessions.get(player);
+        Claim claim = null;
+        ClaimType type;
+        if (session != null) type = session.type();
+        else {
+            claim = claims.findAt(player.getLocation());
+            if (claim == null || !claims.canManage(player, claim)) { Messages.send(player, "Stand inside a claim you manage."); return true; }
+            type = claim.type();
+        }
+        if (type != ClaimType.PROPERTY && type != ClaimType.UNIT) { Messages.send(player, "Only property and unit claims use tags."); return true; }
+        if (args.length < 3) { Messages.send(player, "Use /claim tag <tag|none>."); return true; }
+        try {
+            ClaimTag value = ClaimTag.parse(args[2]);
+            if (value != null && !value.supports(type)) { Messages.send(player, "That tag cannot be used with this claim type."); return true; }
+            if (type == ClaimType.UNIT && value == null) { Messages.send(player, "Units require a tag."); return true; }
+            if (session != null) { session.setTag(value); sessions.showPreview(player); }
+            else claims.setTag(claim, value);
+            Messages.send(player, "Claim tag set to " + (value == null ? "none" : value.name().toLowerCase(Locale.ROOT)) + ".");
+        } catch (IllegalArgumentException | SQLException exception) { Messages.send(player, exception.getMessage()); }
+        return true;
+    }
+
+    private boolean blocks(Player player) {
+        Messages.send(player, "Home claim blocks: " + profiles.usedHomeBlocks(player.getUniqueId()) + " used / "
+                + profiles.totalHomeBlocks(player.getUniqueId()) + " total / "
+                + profiles.availableHomeBlocks(player.getUniqueId()) + " available.");
+        return true;
+    }
+
+    private boolean buyBlocks(Player player, String[] args) {
+        if (args.length < 3) { Messages.send(player, "Use /claim buyblocks <amount>."); return true; }
+        try {
+            ClaimProfileService.PurchaseResult result = profiles.purchase(player, Long.parseLong(args[2].replace(",", "")));
+            Messages.send(player, result.message());
+            if (result.success()) blocks(player);
+        } catch (NumberFormatException exception) { Messages.send(player, "Claim blocks must be a positive whole number."); }
+        catch (SQLException | IllegalArgumentException exception) { Messages.send(player, exception.getMessage()); }
+        return true;
+    }
+
     private boolean info(Player player) {
         Claim claim = claims.findAt(player.getLocation());
         if (claim == null) {
@@ -342,6 +365,7 @@ public final class ClaimCommand {
         String name = claim.name() == null || claim.name().isBlank() ? "" : " | " + claim.name();
         Messages.send(player, "Claim " + claim.id().toString().substring(0, 8)
                 + " | " + pretty(claim.type()) + name
+                + (claim.tag() == null ? "" : " | " + claim.tag().name().toLowerCase(Locale.ROOT))
                 + " | " + size
                 + " | " + geometry.blockAreaEstimate() + " blocks²");
         return true;
@@ -484,13 +508,17 @@ public final class ClaimCommand {
 
     public List<String> tabComplete(CommandSender sender, String[] args) {
         if (args.length == 2) {
-            return match(args[1], List.of("start", "confirm", "cancel", "undo", "edit", "preview", "settings", "height", "name", "territory", "info", "delete"));
+            return match(args[1], List.of("start", "confirm", "cancel", "undo", "edit", "preview", "settings", "height", "name", "territory", "tag", "blocks", "buyblocks", "info", "delete"));
         }
         if (args.length == 3 && args[1].equalsIgnoreCase("start")) {
             return match(args[2], claimTypeNames());
         }
-        if (args.length == 4 && args[1].equalsIgnoreCase("start") && parseType(args[2]) != null) {
-            return match(args[3], List.of("company", "government"));
+        if (args.length == 4 && args[1].equalsIgnoreCase("start")) {
+            ClaimType type = parseType(args[2]);
+            if (type == ClaimType.TERRITORY) return match(args[3], List.of("council", "mayor", "monarchy", "direct_democracy", "custom"));
+            if (type == ClaimType.UNIT) return match(args[3], List.of("apartment", "hotel_room", "office", "shop_unit", "storage"));
+            if (type == ClaimType.PROPERTY) return match(args[3], List.of("residential", "farm", "shop", "building", "apartment_building", "hotel", "venue", "harbor", "rail_station", "packing_station", "mule_station", "civic", "company"));
+            if (type != null) return match(args[3], List.of("company", "government"));
         }
         if (args.length == 3 && args[1].equalsIgnoreCase("height")) {
             return match(args[2], List.of("full", "bottom", "top"));
@@ -508,29 +536,16 @@ public final class ClaimCommand {
     }
 
     private List<String> claimTypeNames() {
-        return List.of("property", "house", "farm", "shop", "building", "apartment", "hotel",
-                "city", "district", "venue", "theater", "harbor", "rail_station", "packing_station",
-                "mule_station", "civic", "protected", "territory");
+        return List.of("home", "property", "unit", "territory", "district", "protected");
     }
 
     private ClaimType parseType(String input) {
         return switch (input.toLowerCase(Locale.ROOT)) {
-            case "property", "plot", "home", "house" -> ClaimType.PROPERTY;
-            case "shop" -> ClaimType.SHOP;
-            case "farm" -> ClaimType.FARM;
-            case "building" -> ClaimType.BUILDING;
-            case "apartment", "apt" -> ClaimType.APARTMENT;
-            case "hotel", "hotel_room", "room" -> ClaimType.HOTEL_ROOM;
+            case "home", "house" -> ClaimType.HOME;
+            case "property", "plot" -> ClaimType.PROPERTY;
+            case "unit" -> ClaimType.UNIT;
             case "territory" -> ClaimType.TERRITORY;
-            case "city" -> ClaimType.CITY;
             case "district" -> ClaimType.DISTRICT;
-            case "government", "government_land", "civic" -> ClaimType.GOVERNMENT;
-            case "company", "company_land" -> ClaimType.COMPANY;
-            case "venue", "theater", "theatre", "arena" -> ClaimType.VENUE;
-            case "harbor", "harbour" -> ClaimType.HARBOR;
-            case "rail", "rail_station", "station" -> ClaimType.RAIL_STATION;
-            case "packing", "packing_station" -> ClaimType.PACKING_STATION;
-            case "mule", "mule_station" -> ClaimType.MULE_STATION;
             case "protected", "garden" -> ClaimType.PROTECTED;
             default -> null;
         };
@@ -556,6 +571,6 @@ public final class ClaimCommand {
     }
 
     private void help(Player player) {
-        Messages.send(player, "Use /claim start <type>, /claim info, or /claim settings. City/district creation also uses /claim name <name>. /garden claim also works.");
+        Messages.send(player, "Use /claim start <home|property|unit|territory|district|protected>, /claim blocks, /claim info, or /claim settings.");
     }
 }

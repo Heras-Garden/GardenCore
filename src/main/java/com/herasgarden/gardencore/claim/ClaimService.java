@@ -24,11 +24,16 @@ public final class ClaimService {
     private final ClaimRepository repository;
     private final OrganizationService organizations;
     private final Map<UUID, Claim> claims = new ConcurrentHashMap<>();
+    private ClaimProfileService profiles;
 
     public ClaimService(GardenCore plugin, ClaimRepository repository, OrganizationService organizations) {
         this.plugin = plugin;
         this.repository = repository;
         this.organizations = organizations;
+    }
+
+    public void setProfiles(ClaimProfileService profiles) {
+        this.profiles = profiles;
     }
 
     public void load() throws SQLException {
@@ -154,17 +159,11 @@ public final class ClaimService {
             }
         }
 
-        if (type == ClaimType.CITY && (parent == null || parent.type() != ClaimType.TERRITORY)) {
-            return ClaimValidation.invalid("A city must be completely inside a territory claim that you manage.");
+        if (type == ClaimType.DISTRICT && (parent == null || parent.type() != ClaimType.TERRITORY)) {
+            return ClaimValidation.invalid("A district must be completely inside a territory claim that you manage.");
         }
-        if (type == ClaimType.DISTRICT && (parent == null || parent.type() != ClaimType.CITY)) {
-            return ClaimValidation.invalid("A district must be completely inside a city claim that you manage.");
-        }
-        if ((type == ClaimType.APARTMENT || type == ClaimType.HOTEL_ROOM)
-                && (parent == null || parent.type() != ClaimType.BUILDING)) {
-            return ClaimValidation.invalid(type == ClaimType.APARTMENT
-                    ? "An apartment must be completely inside a building claim that you manage."
-                    : "A hotel room must be completely inside a building claim that you manage.");
+        if (type == ClaimType.UNIT && (parent == null || parent.type() != ClaimType.PROPERTY)) {
+            return ClaimValidation.invalid("A unit must be completely inside a property claim that you manage.");
         }
 
         for (Claim other : claims.values()) {
@@ -182,28 +181,43 @@ public final class ClaimService {
             if (type == ClaimType.TERRITORY && other.type() != ClaimType.TERRITORY) {
                 continue;
             }
-            if (type == ClaimType.CITY
-                    && other.type() != ClaimType.TERRITORY
-                    && other.type() != ClaimType.CITY) {
-                continue;
-            }
             if (type == ClaimType.DISTRICT
                     && other.type() != ClaimType.TERRITORY
-                    && other.type() != ClaimType.CITY
                     && other.type() != ClaimType.DISTRICT) {
                 continue;
             }
             return ClaimValidation.invalid("This area overlaps another claim.");
         }
 
+        if (ownerType == ClaimOwnerType.COMPANY
+                && type != ClaimType.PROPERTY && type != ClaimType.UNIT) {
+            return ClaimValidation.invalid("Companies may create property and unit claims only.");
+        }
+
         int limit = ownershipLimit(type, ownerType);
+        if (limit == 0) {
+            return ClaimValidation.invalid("This owner type cannot create that kind of claim.");
+        }
         if (limit > 0) {
-            long existing = claims.values().stream()
-                    .filter(claim -> claim.ownerType() == ownerType && claim.ownerId().equals(ownerId))
-                    .filter(claim -> countTowardSameLimit(type, claim.type()))
-                    .count();
+            long existing = type == ClaimType.TERRITORY && ownerType == ClaimOwnerType.PLAYER
+                    ? claims.values().stream()
+                            .filter(claim -> claim.type() == ClaimType.TERRITORY)
+                            .filter(claim -> claim.createdBy().equals(ownerId))
+                            .count()
+                    : claims.values().stream()
+                            .filter(claim -> claim.ownerType() == ownerType && claim.ownerId().equals(ownerId))
+                            .filter(claim -> countTowardSameLimit(type, claim.type()))
+                            .count();
             if (existing >= limit) {
                 return ClaimValidation.invalid("You have reached the ownership limit for this claim type.");
+            }
+        }
+
+        if (type == ClaimType.HOME && ownerType == ClaimOwnerType.PLAYER && profiles != null) {
+            long available = profiles.availableHomeBlocks(ownerId);
+            if (area > available) {
+                return ClaimValidation.invalid("This home needs " + area + " claim blocks, but you only have "
+                        + available + " available.");
             }
         }
 
@@ -211,18 +225,29 @@ public final class ClaimService {
     }
 
     public Claim create(ClaimType type, ClaimOwnerType ownerType, UUID ownerId, UUID parentId,
-                        String name, ClaimGeometry geometry, UUID createdBy) throws SQLException {
+                        String name, ClaimTag tag, GovernmentType governmentType,
+                        ClaimGeometry geometry, UUID createdBy) throws SQLException {
         ClaimValidation validation = validate(geometry, type, ownerType, ownerId, parentId);
         if (!validation.valid()) {
             throw new IllegalArgumentException(validation.reason());
         }
 
         Claim claim = new Claim(UUID.randomUUID(), type, ownerType, ownerId, parentId, name,
-                geometry, createdBy, Instant.now());
+                tag, governmentType, geometry, createdBy, Instant.now());
         applyDefaultPermissions(claim);
         repository.insert(claim);
         claims.put(claim.id(), claim);
         return claim;
+    }
+
+    public void setTag(Claim claim, ClaimTag tag) throws SQLException {
+        if (claim == null) throw new IllegalArgumentException("Claim is required.");
+        if (tag != null && !tag.supports(claim.type())) {
+            throw new IllegalArgumentException("That tag cannot be used with a "
+                    + claim.type().name().toLowerCase(Locale.ROOT) + " claim.");
+        }
+        repository.updateTag(claim.id(), tag);
+        claim.setTag(tag);
     }
 
     public void transferOwner(Claim claim, ClaimOwnerType ownerType, UUID ownerId) throws SQLException {
@@ -377,23 +402,49 @@ public final class ClaimService {
     }
 
     private int ownershipLimit(ClaimType type, ClaimOwnerType ownerType) {
-        if (ownerType != ClaimOwnerType.PLAYER) {
-            return -1;
+        if (ownerType == ClaimOwnerType.GOVERNMENT) return -1;
+        if (ownerType == ClaimOwnerType.COMPANY) {
+            return switch (type) {
+                case PROPERTY -> plugin.getConfig().getInt("claims.company-limits.properties", 50);
+                case UNIT -> plugin.getConfig().getInt("claims.company-limits.units", 100);
+                default -> 0;
+            };
         }
         return switch (type) {
-            case APARTMENT -> plugin.getConfig().getInt("claims.player-limits.apartments", 5);
-            case SHOP -> plugin.getConfig().getInt("claims.player-limits.shops", 15);
-            case PROPERTY, FARM, BUILDING -> plugin.getConfig().getInt("claims.player-limits.major-properties", 3);
+            case HOME -> plugin.getConfig().getInt("claims.player-limits.homes", 5);
+            case PROPERTY -> plugin.getConfig().getInt("claims.player-limits.properties", 25);
+            case UNIT -> plugin.getConfig().getInt("claims.player-limits.units", 50);
             case TERRITORY -> plugin.getConfig().getInt("claims.player-limits.territories", 1);
-            default -> -1;
+            case DISTRICT, PROTECTED -> -1;
         };
     }
 
     private boolean countTowardSameLimit(ClaimType requested, ClaimType existing) {
-        if (requested == ClaimType.PROPERTY || requested == ClaimType.FARM || requested == ClaimType.BUILDING) {
-            return existing == ClaimType.PROPERTY || existing == ClaimType.FARM || existing == ClaimType.BUILDING;
-        }
         return requested == existing;
+    }
+
+    public long usedHomeBlocks(UUID playerId) {
+        return claims.values().stream()
+                .filter(claim -> claim.type() == ClaimType.HOME)
+                .filter(claim -> claim.ownerType() == ClaimOwnerType.PLAYER && claim.ownerId().equals(playerId))
+                .mapToLong(claim -> claim.geometry().blockAreaEstimate())
+                .sum();
+    }
+
+    public boolean insideTerritory(Claim claim) {
+        return claim != null && claims.values().stream()
+                .filter(other -> other.type() == ClaimType.TERRITORY)
+                .anyMatch(other -> other.geometry().containsGeometry(claim.geometry()));
+    }
+
+    public void deleteInactiveHome(Claim home) throws SQLException {
+        if (home == null || home.type() != ClaimType.HOME) return;
+        for (Claim child : claims.values().stream().filter(other -> home.id().equals(other.parentId())).toList()) {
+            repository.updateParent(child.id(), null);
+            child.setParentId(null);
+        }
+        repository.delete(home.id());
+        claims.remove(home.id());
     }
 
     private boolean isAncestor(Claim possibleAncestor, Claim claim) {

@@ -14,6 +14,8 @@ public final class ClaimSession {
     private final ClaimType type;
     private final ClaimOwnerType ownerType;
     private final UUID ownerId;
+    private ClaimTag tag;
+    private GovernmentType governmentType;
     private final ClaimShape shape;
     private final List<ClaimPoint> points = new ArrayList<>();
     private UUID parentId;
@@ -30,16 +32,19 @@ public final class ClaimSession {
     private ItemStack territoryFlag;
 
     public ClaimSession(UUID playerId, World world, ClaimType type, ClaimOwnerType ownerType,
-                        UUID ownerId, ClaimShape shape, boolean fullHeight, int initialY) {
+                        UUID ownerId, ClaimTag tag, GovernmentType governmentType,
+                        ClaimShape shape, boolean fullHeight, int initialY) {
         this.playerId = playerId;
         this.worldId = world.getUID();
         this.type = type;
         this.ownerType = ownerType;
         this.ownerId = ownerId;
+        this.tag = tag;
+        this.governmentType = governmentType;
         this.shape = shape;
         this.fullHeight = fullHeight;
         this.previewY = initialY;
-        if (type == ClaimType.APARTMENT) {
+        if (type == ClaimType.UNIT) {
             this.apartmentHeightStep = ApartmentHeightStep.CEILING;
         } else {
             this.apartmentHeightStep = ApartmentHeightStep.DONE;
@@ -60,6 +65,8 @@ public final class ClaimSession {
     public ClaimType type() { return type; }
     public ClaimOwnerType ownerType() { return ownerType; }
     public UUID ownerId() { return ownerId; }
+    public ClaimTag tag() { return tag; }
+    public GovernmentType governmentType() { return governmentType; }
     public ClaimShape shape() { return shape; }
     public UUID parentId() { return parentId; }
     public boolean closed() { return closed; }
@@ -72,7 +79,7 @@ public final class ClaimSession {
     public boolean heightConfigured() { return fullHeight || (bottomSet && topSet); }
     public ApartmentHeightStep apartmentHeightStep() { return apartmentHeightStep; }
     public boolean awaitingApartmentHeightClick() {
-        return type == ClaimType.APARTMENT && closed && apartmentHeightStep != ApartmentHeightStep.DONE;
+        return type == ClaimType.UNIT && closed && apartmentHeightStep != ApartmentHeightStep.DONE;
     }
     public String claimName() { return claimName; }
     public String territoryName() { return territoryName; }
@@ -80,6 +87,8 @@ public final class ClaimSession {
     public List<ClaimPoint> points() { return Collections.unmodifiableList(points); }
 
     public void setParentId(UUID parentId) { this.parentId = parentId; }
+    public void setTag(ClaimTag tag) { this.tag = tag; }
+    public void setGovernmentType(GovernmentType governmentType) { this.governmentType = governmentType; }
     public void setPreviewY(int previewY) { this.previewY = previewY; }
     public void setClaimName(String claimName) {
         this.claimName = claimName == null ? null : claimName.trim();
@@ -116,7 +125,7 @@ public final class ClaimSession {
                 return AddPointResult.NEED_MORE_POINTS;
             }
             closed = true;
-            if (type == ClaimType.APARTMENT && !heightConfigured()) {
+            if (type == ClaimType.UNIT && !heightConfigured()) {
                 apartmentHeightStep = ApartmentHeightStep.CEILING;
                 bottomSet = false;
                 topSet = false;
@@ -141,7 +150,7 @@ public final class ClaimSession {
         }
         if (closed) {
             closed = false;
-            if (type == ClaimType.APARTMENT) {
+            if (type == ClaimType.UNIT) {
                 resetApartmentHeight();
             }
         }
@@ -156,7 +165,7 @@ public final class ClaimSession {
     }
 
     public ApartmentHeightResult selectApartmentHeight(int y) {
-        if (type != ClaimType.APARTMENT || !closed) {
+        if (type != ClaimType.UNIT || !closed) {
             return ApartmentHeightResult.NOT_READY;
         }
         if (apartmentHeightStep == ApartmentHeightStep.CEILING) {
@@ -173,7 +182,7 @@ public final class ClaimSession {
     }
 
     public void resetApartmentHeight() {
-        if (type != ClaimType.APARTMENT) {
+        if (type != ClaimType.UNIT) {
             return;
         }
         fullHeight = false;

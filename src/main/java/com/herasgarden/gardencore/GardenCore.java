@@ -60,6 +60,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     private ClaimService claimService;
     private ClaimSessionManager claimSessionManager;
     private ClaimPreviewRenderer claimPreviewRenderer;
+    private ClaimProfileService claimProfileService;
     private PropertyService propertyService;
     private OrganizationService organizationService;
     private TerritoryService territoryService;
@@ -123,7 +124,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         }
 
         ClaimCommand claimCommand = new ClaimCommand(
-                claimService, claimSessionManager, organizationService, territoryService, propertyService);
+                claimService, claimSessionManager, organizationService, territoryService, propertyService, claimProfileService);
         CompanyCommand companyCommand = new CompanyCommand(organizationService);
         GardenCommand gardenCommand = new GardenCommand(claimCommand, companyCommand);
         PluginCommand command = getCommand("garden");
@@ -142,6 +143,25 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         }
         getServer().getPluginManager().registerEvents(new ClaimSelectionListener(claimSessionManager), this);
         getServer().getPluginManager().registerEvents(new ClaimProtectionListener(claimService, claimSessionManager), this);
+        getServer().getPluginManager().registerEvents(new PlayerClaimProfileListener(claimProfileService), this);
+
+        long playtimeTicks = 20L * 60L * 5L;
+        getServer().getScheduler().runTaskTimer(this, () -> getServer().getOnlinePlayers().forEach(player -> {
+            try {
+                claimProfileService.recordPlayMinutes(player.getUniqueId(), 5L);
+            } catch (SQLException exception) {
+                getLogger().warning("Could not update claim playtime for " + player.getName() + ": " + exception.getMessage());
+            }
+        }), playtimeTicks, playtimeTicks);
+
+        getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+            try {
+                int removed = claimProfileService.cleanupInactiveHomes();
+                if (removed > 0) getLogger().info("Released " + removed + " inactive wilderness HOME claim(s).");
+            } catch (SQLException exception) {
+                getLogger().warning("Inactive HOME cleanup failed: " + exception.getMessage());
+            }
+        }, 20L * 60L, 20L * 60L * 60L * 24L);
 
         claimPreviewRenderer = new ClaimPreviewRenderer(this, claimSessionManager);
         claimPreviewRenderer.start();
@@ -257,12 +277,14 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             ClaimRepository claimRepository = new ClaimRepository(databaseManager);
             claimService = new ClaimService(this, claimRepository, organizationService);
             claimService.load();
+            claimProfileService = new ClaimProfileService(this, databaseManager, claimService);
+            claimService.setProfiles(claimProfileService);
             claimOwnershipBridge = new CoreClaimOwnershipBridge(claimService);
 
             TerritoryRepository territoryRepository = new TerritoryRepository(databaseManager);
             territoryService = new TerritoryService(territoryRepository);
             territoryService.load();
-            claimSessionManager = new ClaimSessionManager(this, claimService, territoryService);
+            claimSessionManager = new ClaimSessionManager(this, claimService, territoryService, claimProfileService);
 
             PropertyRepository propertyRepository = new PropertyRepository(databaseManager);
             propertyService = new PropertyService(this, claimService, propertyRepository, economy, organizationService);

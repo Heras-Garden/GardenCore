@@ -5,6 +5,7 @@ import com.herasgarden.gardencore.claim.Claim;
 import com.herasgarden.gardencore.claim.ClaimOwnerType;
 import com.herasgarden.gardencore.claim.ClaimService;
 import com.herasgarden.gardencore.claim.ClaimType;
+import com.herasgarden.gardencore.claim.ClaimTag;
 import com.herasgarden.gardencore.api.integration.IntegrationEventType;
 import com.herasgarden.gardencore.api.order.GardenOrder;
 import com.herasgarden.gardencore.api.order.OrderState;
@@ -232,7 +233,7 @@ public final class PropertyService {
             return false;
         }
         Claim claim = claims.get(property.claimId());
-        if (claim == null || claim.type() != ClaimType.APARTMENT) {
+        if (claim == null || claim.type() != ClaimType.UNIT || claim.tag() != ClaimTag.APARTMENT) {
             return true;
         }
         return hasSignStyle(property.id(), PropertySignStyle.APARTMENT_UNIT)
@@ -296,7 +297,7 @@ public final class PropertyService {
             if (blocked.isPresent()) {
                 return PurchaseResult.failure(blocked.get());
             }
-            if (claim.type() == ClaimType.APARTMENT && !isApartmentSetupComplete(property)) {
+            if (claim.type() == ClaimType.UNIT && claim.tag() == ClaimTag.APARTMENT && !isApartmentSetupComplete(property)) {
                 return PurchaseResult.failure("This apartment is not ready for purchase until both its room sign and mailbox sign are linked.");
             }
             if (claim.ownerType() != ClaimOwnerType.PLAYER) {
@@ -443,7 +444,8 @@ public final class PropertyService {
 
     public void applySignText(Sign sign, SqlProperty property) {
         PropertySignStyle style = claims.get(property.claimId()) != null
-                && claims.get(property.claimId()).type() == ClaimType.APARTMENT
+                && claims.get(property.claimId()).type() == ClaimType.UNIT
+                && claims.get(property.claimId()).tag() == ClaimTag.APARTMENT
                 ? PropertySignStyle.APARTMENT_UNIT : PropertySignStyle.PROPERTY_MAILBOX;
         applySignText(sign, property, style);
     }

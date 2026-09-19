@@ -19,7 +19,7 @@ commands:
     aliases: [gc]
   claim:
     description: Create and manage GardenCore claims without typing /garden.
-    usage: /claim <start|confirm|cancel|undo|edit|preview|settings|height|territory|info|delete>
+    usage: /claim <start|confirm|cancel|undo|edit|preview|settings|height|territory|tag|blocks|buyblocks|info|delete>
   company:
     description: Manage GardenCore companies without typing /garden.
     usage: /company <create|info|list>
