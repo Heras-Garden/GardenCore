@@ -100,6 +100,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getServicesManager().register(
                 PropertyManagementService.class, propertyManagementService, this, ServicePriority.Normal);
         marriageIntegration = new MarriageMasterIntegration(this);
+        marriageIntegration.applyConfiguredSettings();
         claimService.setMarriageDirectory(marriageIntegration);
         getServer().getServicesManager().register(
                 MarriageDirectory.class, marriageIntegration, this, ServicePriority.Normal);

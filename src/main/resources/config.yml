@@ -108,3 +108,11 @@ properties:
   legacy-worldguard-signs-enabled: false
   auto-bind-mailbox-from-sign: true
   sign-price-prefix: "⟡ "
+
+# MarriageMaster integration. Marriage Master handles the proposal/accept flow;
+# GardenCore provides Obols through Vault and shares personal land/home/horse access.
+marriage:
+  sync-marriage-master-settings: true
+  # Total marriage cost. Marriage Master splits this evenly between both players.
+  cost: 100.0
+  divorce-cost: 0.0
