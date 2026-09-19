@@ -21,9 +21,16 @@ public final class ClaimRepository {
             while (result.next()) {
                 UUID id = UUID.fromString(result.getString("claim_uuid"));
                 String parent = result.getString("parent_uuid");
+                String storedType = result.getString("claim_type");
+                String storedTag = result.getString("claim_tag");
+                String storedGovernmentType = result.getString("government_type");
+                ClaimTag tag = storedTag == null || storedTag.isBlank()
+                        ? ClaimTag.legacyTag(storedType) : ClaimTag.parse(storedTag);
                 bases.put(id, new BaseClaim(
                         id,
-                        ClaimType.valueOf(result.getString("claim_type")),
+                        ClaimType.fromStorage(storedType),
+                        tag,
+                        GovernmentType.parse(storedGovernmentType),
                         ClaimOwnerType.valueOf(result.getString("owner_type")),
                         UUID.fromString(result.getString("owner_uuid")),
                         parent == null ? null : UUID.fromString(parent),
@@ -75,7 +82,7 @@ public final class ClaimRepository {
             ClaimGeometry geometry = new ClaimGeometry(base.worldId(), base.worldName(), points,
                     base.minY(), base.maxY(), base.fullHeight());
             Claim claim = new Claim(base.id(), base.type(), base.ownerType(), base.ownerId(), base.parentId(),
-                    base.name(), geometry, base.createdBy(), base.createdAt());
+                    base.name(), base.tag(), base.governmentType(), geometry, base.createdBy(), base.createdAt());
             for (StoredPermission permission : storedPermissions.getOrDefault(base.id(), List.of())) {
                 claim.setPermission(permission.subject(), permission.permission(), permission.value());
             }
@@ -89,22 +96,24 @@ public final class ClaimRepository {
             connection.setAutoCommit(false);
             try {
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO gc_claims (claim_uuid, claim_type, owner_type, owner_uuid, parent_uuid, name, "
-                                + "world_uuid, world_name, min_y, max_y, full_height, created_by, created_at) "
-                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                        "INSERT INTO gc_claims (claim_uuid, claim_type, claim_tag, government_type, owner_type, owner_uuid, "
+                                + "parent_uuid, name, world_uuid, world_name, min_y, max_y, full_height, created_by, created_at) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
                     statement.setString(1, claim.id().toString());
                     statement.setString(2, claim.type().name());
-                    statement.setString(3, claim.ownerType().name());
-                    statement.setString(4, claim.ownerId().toString());
-                    statement.setString(5, claim.parentId() == null ? null : claim.parentId().toString());
-                    statement.setString(6, claim.name());
-                    statement.setString(7, claim.geometry().worldId().toString());
-                    statement.setString(8, claim.geometry().worldName());
-                    statement.setInt(9, claim.geometry().minY());
-                    statement.setInt(10, claim.geometry().maxY());
-                    statement.setInt(11, claim.geometry().fullHeight() ? 1 : 0);
-                    statement.setString(12, claim.createdBy().toString());
-                    statement.setLong(13, claim.createdAt().toEpochMilli());
+                    statement.setString(3, claim.tag() == null ? null : claim.tag().name());
+                    statement.setString(4, claim.governmentType() == null ? null : claim.governmentType().name());
+                    statement.setString(5, claim.ownerType().name());
+                    statement.setString(6, claim.ownerId().toString());
+                    statement.setString(7, claim.parentId() == null ? null : claim.parentId().toString());
+                    statement.setString(8, claim.name());
+                    statement.setString(9, claim.geometry().worldId().toString());
+                    statement.setString(10, claim.geometry().worldName());
+                    statement.setInt(11, claim.geometry().minY());
+                    statement.setInt(12, claim.geometry().maxY());
+                    statement.setInt(13, claim.geometry().fullHeight() ? 1 : 0);
+                    statement.setString(14, claim.createdBy().toString());
+                    statement.setLong(15, claim.createdAt().toEpochMilli());
                     statement.executeUpdate();
                 }
 
@@ -132,6 +141,18 @@ public final class ClaimRepository {
         }
     }
 
+
+    public void updateTag(UUID claimId, ClaimTag tag) throws SQLException {
+        try (Connection connection = database.connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE gc_claims SET claim_tag = ? WHERE claim_uuid = ?")) {
+            statement.setString(1, tag == null ? null : tag.name());
+            statement.setString(2, claimId.toString());
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Claim tag update affected no rows for " + claimId);
+            }
+        }
+    }
 
     public void updateOwner(UUID claimId, ClaimOwnerType ownerType, UUID ownerId) throws SQLException {
         try (Connection connection = database.connection();
@@ -209,7 +230,8 @@ public final class ClaimRepository {
         }
     }
 
-    private record BaseClaim(UUID id, ClaimType type, ClaimOwnerType ownerType, UUID ownerId, UUID parentId,
+    private record BaseClaim(UUID id, ClaimType type, ClaimTag tag, GovernmentType governmentType,
+                             ClaimOwnerType ownerType, UUID ownerId, UUID parentId,
                              String name, UUID worldId, String worldName, int minY, int maxY, boolean fullHeight,
                              UUID createdBy, Instant createdAt) {}
 
