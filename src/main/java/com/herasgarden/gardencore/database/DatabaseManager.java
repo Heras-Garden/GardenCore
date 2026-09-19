@@ -13,7 +13,7 @@ import java.sql.Statement;
 import java.util.Locale;
 
 public final class DatabaseManager implements AutoCloseable {
-    private static final int SCHEMA_VERSION = 4;
+    private static final int SCHEMA_VERSION = 5;
 
     private final GardenCore plugin;
     private HikariDataSource dataSource;
@@ -104,6 +104,11 @@ public final class DatabaseManager implements AutoCloseable {
             migrateToV4();
             setVersion(4);
             current = 4;
+        }
+        if (current < 5) {
+            migrateToV5();
+            setVersion(5);
+            current = 5;
         }
 
         if (current > SCHEMA_VERSION) {
@@ -238,6 +243,36 @@ public final class DatabaseManager implements AutoCloseable {
                     + "created_at BIGINT NOT NULL)");
             statement.executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS idx_gc_territory_name "
                     + "ON gc_territories (name_key)");
+        }
+    }
+
+    private void migrateToV5() throws SQLException {
+        try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE gc_claims ADD COLUMN claim_tag VARCHAR(32) NULL");
+            statement.executeUpdate("ALTER TABLE gc_claims ADD COLUMN government_type VARCHAR(32) NULL");
+
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'SHOP', claim_type = 'PROPERTY' WHERE claim_type = 'SHOP'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'FARM', claim_type = 'PROPERTY' WHERE claim_type = 'FARM'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'BUILDING', claim_type = 'PROPERTY' WHERE claim_type = 'BUILDING'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'APARTMENT', claim_type = 'UNIT' WHERE claim_type = 'APARTMENT'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'HOTEL_ROOM', claim_type = 'UNIT' WHERE claim_type = 'HOTEL_ROOM'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'VENUE', claim_type = 'PROPERTY' WHERE claim_type = 'VENUE'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'HARBOR', claim_type = 'PROPERTY' WHERE claim_type = 'HARBOR'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'RAIL_STATION', claim_type = 'PROPERTY' WHERE claim_type = 'RAIL_STATION'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'PACKING_STATION', claim_type = 'PROPERTY' WHERE claim_type = 'PACKING_STATION'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'MULE_STATION', claim_type = 'PROPERTY' WHERE claim_type = 'MULE_STATION'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'CIVIC', claim_type = 'PROPERTY' WHERE claim_type = 'GOVERNMENT'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_tag = 'COMPANY', claim_type = 'PROPERTY' WHERE claim_type = 'COMPANY'");
+            statement.executeUpdate("UPDATE gc_claims SET claim_type = 'DISTRICT' WHERE claim_type = 'CITY'");
+
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS gc_player_claim_profiles ("
+                    + "player_uuid VARCHAR(36) PRIMARY KEY,"
+                    + "earned_blocks BIGINT NOT NULL DEFAULT 0,"
+                    + "purchased_blocks BIGINT NOT NULL DEFAULT 0,"
+                    + "play_minutes BIGINT NOT NULL DEFAULT 0,"
+                    + "earning_locked INTEGER NOT NULL DEFAULT 0,"
+                    + "last_seen BIGINT NOT NULL,"
+                    + "updated_at BIGINT NOT NULL)");
         }
     }
 
