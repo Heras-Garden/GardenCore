@@ -43,12 +43,32 @@ public final class HorseCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length == 0 || args[0].equalsIgnoreCase("info")) {
-            Messages.send(player, "Horse access: " + (access.publicAccess(horse) ? "public" : "private")
+            String horseName = horse.customName() == null ? "Unnamed" : net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(horse.customName());
+            Messages.send(player, "Horse: " + horseName
+                    + " | access: " + (access.publicAccess(horse) ? "public" : "private")
+                    + " | spouse access: automatic"
                     + " | trusted players: " + access.trusted(horse).size() + ".");
             return true;
         }
 
         switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "name" -> {
+                if (!access.owns(player, horse) && !player.hasPermission("gardencore.horse.admin")) {
+                    Messages.send(player, "Only the horse owner can name it.");
+                    return true;
+                }
+                if (args.length < 2) {
+                    Messages.send(player, "Use /horse name <name>.");
+                    return true;
+                }
+                String horseName = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)).trim();
+                if (horseName.length() < 1 || horseName.length() > 32) {
+                    Messages.send(player, "Horse names must be between 1 and 32 characters.");
+                    return true;
+                }
+                access.nameHorse(horse, horseName);
+                Messages.send(player, "Your horse is now named " + horseName + ".");
+            }
             case "access" -> {
                 if (args.length < 2 || (!args[1].equalsIgnoreCase("public") && !args[1].equalsIgnoreCase("private"))) {
                     Messages.send(player, "Use /horse access <public|private>.");
@@ -75,7 +95,7 @@ public final class HorseCommand implements CommandExecutor, TabCompleter {
                 Messages.send(player, target.getName() + (args[0].equalsIgnoreCase("trust")
                         ? " can now ride this horse." : " can no longer ride this horse."));
             }
-            default -> Messages.send(player, "Use /horse <info|access|trust|untrust>.");
+            default -> Messages.send(player, "Use /horse <name|info|access|trust|untrust>.");
         }
         return true;
     }
@@ -89,7 +109,7 @@ public final class HorseCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
-            return List.of("info", "access", "trust", "untrust").stream()
+            return List.of("name", "info", "access", "trust", "untrust").stream()
                     .filter(value -> value.startsWith(prefix)).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("access")) {

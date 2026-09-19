@@ -29,7 +29,7 @@ commands:
     permission: gardencore.claim.admin
   horse:
     description: Manage who may ride your tamed horse.
-    usage: /horse <info|access|trust|untrust>
+    usage: /horse <name|info|access|trust|untrust>
 
 permissions:
   gardencore.obol:
