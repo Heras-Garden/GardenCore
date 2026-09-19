@@ -50,3 +50,7 @@ permissions:
   gardencore.company.create:
     description: Create a GardenCore company.
     default: true
+
+  gardencore.horse.admin:
+    description: Manage horse access on any tamed horse.
+    default: op
