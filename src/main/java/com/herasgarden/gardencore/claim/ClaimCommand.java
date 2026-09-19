@@ -270,26 +270,26 @@ public final class ClaimCommand {
 
         switch (args[2].toLowerCase(Locale.ROOT)) {
             case "reset" -> {
-                if (session.type() != ClaimType.APARTMENT) {
+                if (session.type() != ClaimType.UNIT) {
                     ClaimChatUi.sendSettings(player, session);
                     return true;
                 }
                 session.resetApartmentHeight();
-                Messages.send(player, "Apartment height reset. Right-click the ceiling, then right-click the floor.");
+                Messages.send(player, "Unit height reset. Right-click the ceiling, then right-click the floor.");
                 ClaimChatUi.sendApartmentHeightPrompt(player, session);
                 return true;
             }
             case "full" -> {
-                if (session.type() == ClaimType.APARTMENT) {
-                    Messages.send(player, "Apartment height is selected by right-clicking the ceiling, then the floor.");
+                if (session.type() == ClaimType.UNIT) {
+                    Messages.send(player, "Unit height is selected by right-clicking the ceiling, then the floor.");
                     ClaimChatUi.sendApartmentHeightPrompt(player, session);
                     return true;
                 }
                 session.useFullHeight(player.getWorld());
             }
             case "bottom", "top" -> {
-                if (session.type() == ClaimType.APARTMENT) {
-                    Messages.send(player, "Apartment height is selected by right-clicking the ceiling, then the floor.");
+                if (session.type() == ClaimType.UNIT) {
+                    Messages.send(player, "Unit height is selected by right-clicking the ceiling, then the floor.");
                     ClaimChatUi.sendApartmentHeightPrompt(player, session);
                     return true;
                 }

@@ -37,11 +37,11 @@ public final class ClaimSelectionListener implements Listener {
             return;
         }
 
-        if (session.type() == ClaimType.UNIT && session.awaitingUnitHeightClick()) {
-            ClaimSession.UnitHeightResult heightResult = session.selectUnitHeight(event.getClickedBlock().getY());
-            if (heightResult == ClaimSession.UnitHeightResult.CEILING_SET) {
+        if (session.type() == ClaimType.UNIT && session.awaitingApartmentHeightClick()) {
+            ClaimSession.ApartmentHeightResult heightResult = session.selectApartmentHeight(event.getClickedBlock().getY());
+            if (heightResult == ClaimSession.ApartmentHeightResult.CEILING_SET) {
                 Messages.send(player, "Ceiling set at Y " + event.getClickedBlock().getY() + ". Now right-click the floor.");
-            } else if (heightResult == ClaimSession.UnitHeightResult.COMPLETE) {
+            } else if (heightResult == ClaimSession.ApartmentHeightResult.COMPLETE) {
                 Messages.send(player, "Floor set at Y " + event.getClickedBlock().getY()
                         + ". Unit height is " + session.minY() + " to " + session.maxY() + ".");
             }
@@ -68,7 +68,7 @@ public final class ClaimSelectionListener implements Listener {
                 ClaimChatUi.sendSelectionControls(player, session, validation);
                 if (session.type() == ClaimType.UNIT) {
                     Messages.send(player, "Boundary closed. Right-click the ceiling, then right-click the floor.");
-                    ClaimChatUi.sendUnitHeightPrompt(player, session);
+                    ClaimChatUi.sendApartmentHeightPrompt(player, session);
                 } else if (session.type() == ClaimType.TERRITORY) {
                     ClaimChatUi.sendTerritorySetup(player, session);
                 }

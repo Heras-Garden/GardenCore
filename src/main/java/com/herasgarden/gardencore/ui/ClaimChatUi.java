@@ -31,12 +31,7 @@ public final class ClaimChatUi {
                     .append(button("Undo Point", "/claim undo", ACCENT, "Remove the last corner."))
                     .append(Component.space())
                     .append(button("Settings", "/claim settings", ACCENT, "Claim preview settings."));
-            if (session.type() == session.type() == ClaimType.DISTRICT) {
-                line.append(Component.space())
-                        .append(suggestButton("Set Name", "/claim name ", ACCENT,
-                                "Set the district name before confirming."));
-            }
-            if (session.type() == session.type() == ClaimType.DISTRICT) {
+            if (session.type() == ClaimType.DISTRICT) {
                 line.append(Component.space())
                         .append(suggestButton("Set Name", "/claim name ", ACCENT,
                                 "Set the district name before confirming."));
