@@ -36,7 +36,7 @@ public final class MarriageMasterIntegration implements MarriageDirectory {
             set(configuration, "Marriage.Confirmation.AutoDialog", true);
             set(configuration, "Economy.Enable", true);
             set(configuration, "Economy.Marry",
-                    plugin.getConfig().getDouble("marriage.cost", 100.0D));
+                    plugin.getConfig().getDouble("marriage.cost", 500.0D));
             set(configuration, "Economy.Divorce",
                     plugin.getConfig().getDouble("marriage.divorce-cost", 0.0D));
 

@@ -114,5 +114,5 @@ properties:
 marriage:
   sync-marriage-master-settings: true
   # Total marriage cost. Marriage Master splits this evenly between both players.
-  cost: 100.0
+  cost: 500.0
   divorce-cost: 0.0
