@@ -3,6 +3,7 @@ package com.herasgarden.gardencore.claim;
 import com.herasgarden.gardencore.api.permission.AccessDecision;
 import com.herasgarden.gardencore.api.permission.ContainerAccessAction;
 import com.herasgarden.gardencore.api.permission.ContainerAccessPolicy;
+import com.herasgarden.gardencore.api.permission.ContainerTypes;
 import com.herasgarden.gardencore.api.permission.DoorAccessAction;
 import com.herasgarden.gardencore.api.permission.DoorAccessPolicy;
 import com.herasgarden.gardencore.util.Messages;
@@ -270,8 +271,7 @@ public final class ClaimProtectionListener implements Listener {
     }
 
     private boolean isContainer(Block block) {
-        Material type = block.getType();
-        return type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL;
+        return block != null && ContainerTypes.supported(block.getType());
     }
 
     private boolean isDoor(Block block) {

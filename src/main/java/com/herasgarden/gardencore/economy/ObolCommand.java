@@ -47,11 +47,21 @@ public final class ObolCommand implements CommandExecutor, TabCompleter {
                 Messages.send(player, "You need " + missing + " more ⟡ Obols.");
                 return true;
             }
-            if (!obols.withdrawToPhysical(player, amount)) {
-                Messages.send(player, "The withdrawal could not be completed. Check your inventory space.");
+            ObolService.WithdrawalResult result = obols.withdrawToPhysicalResult(player, amount);
+            if (result.status() == ObolService.WithdrawalStatus.FULL) {
+                Messages.send(player, "Withdrew ⟡ " + amount + ".");
                 return true;
             }
-            Messages.send(player, "Withdrew ⟡ " + amount + ".");
+            if (result.status() == ObolService.WithdrawalStatus.PARTIAL) {
+                String unresolved = result.unresolved() > 0
+                        ? " " + result.unresolved() + " Obols require staff reconciliation."
+                        : "";
+                Messages.send(player, "Partial withdrawal: " + result.delivered()
+                        + " physical Obols were delivered and " + result.compensated()
+                        + " were returned to your balance." + unresolved);
+                return true;
+            }
+            Messages.send(player, "The withdrawal could not be completed. Check your inventory space.");
             return true;
         }
 

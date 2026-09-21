@@ -69,7 +69,9 @@ public final class ClaimProfileService implements ClaimBlockService {
                 : 1.0D;
         long oldAwards = (long) Math.floor((before.playMinutes() / (double) interval) * multiplier);
         long newAwards = (long) Math.floor((newMinutes / (double) interval) * multiplier);
-        earned += Math.max(0L, newAwards - oldAwards) * perAward;
+        if (!before.earningLocked()) {
+            earned += Math.max(0L, newAwards - oldAwards) * perAward;
+        }
         long now = System.currentTimeMillis();
         try (Connection connection = database.connection();
              PreparedStatement statement = connection.prepareStatement(

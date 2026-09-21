@@ -55,31 +55,50 @@ public final class ObolService {
     }
 
     public boolean withdrawToPhysical(Player player, int amount) {
-        if (amount <= 0 || !economy.has(player, amount)) {
-            return false;
-        }
-        if (!hasSpaceFor(player.getInventory(), amount)) {
-            return false;
+        return withdrawToPhysicalResult(player, amount).status() == WithdrawalStatus.FULL;
+    }
+
+    public WithdrawalResult withdrawToPhysicalResult(Player player, int amount) {
+        if (amount <= 0 || !economy.has(player, amount) || !hasSpaceFor(player.getInventory(), amount)) {
+            return new WithdrawalResult(WithdrawalStatus.FAILED, 0, 0, 0);
         }
 
         EconomyResponse response = economy.withdrawPlayer(player, amount);
         if (!response.transactionSuccess()) {
-            return false;
+            return new WithdrawalResult(WithdrawalStatus.FAILED, 0, 0, 0);
         }
 
+        int delivered = 0;
+        int compensated = 0;
+        int unresolved = 0;
         int remaining = amount;
         while (remaining > 0) {
             int stackSize = Math.min(64, remaining);
             Map<Integer, ItemStack> leftovers = player.getInventory().addItem(createObol(stackSize));
-            if (!leftovers.isEmpty()) {
-                int notGiven = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
-                economy.depositPlayer(player, notGiven);
-                remaining -= (stackSize - notGiven);
+            int notGiven = leftovers.values().stream().mapToInt(ItemStack::getAmount).sum();
+            delivered += stackSize - notGiven;
+            remaining -= stackSize;
+
+            if (notGiven > 0) {
+                EconomyResponse refund = economy.depositPlayer(player, notGiven);
+                if (refund.transactionSuccess()) {
+                    compensated += notGiven;
+                } else {
+                    unresolved += notGiven;
+                    plugin.getLogger().severe("Physical Obol withdrawal left " + notGiven
+                            + " Obols unresolved for " + player.getUniqueId() + ".");
+                }
                 break;
             }
-            remaining -= stackSize;
         }
-        return remaining == 0;
+
+        if (delivered == amount && unresolved == 0) {
+            return new WithdrawalResult(WithdrawalStatus.FULL, delivered, compensated, unresolved);
+        }
+        if (delivered > 0) {
+            return new WithdrawalResult(WithdrawalStatus.PARTIAL, delivered, compensated, unresolved);
+        }
+        return new WithdrawalResult(WithdrawalStatus.FAILED, delivered, compensated, unresolved);
     }
 
     public boolean depositPhysical(Player player, int amount) {
@@ -116,30 +135,13 @@ public final class ObolService {
         return item;
     }
 
-    /**
-     * The resource pack renames Emeralds to Obols client-side. Those items do not
-     * necessarily carry Bukkit display-name metadata, so GardenCore can accept
-     * ordinary EMERALD stacks as physical Obols when configured to do so.
-     */
+    /** Only server-created PDC metadata is authoritative physical-currency identity. */
     public boolean isOfficialObol(ItemStack item) {
-        if (item == null || item.getType() != Material.EMERALD) {
+        if (item == null || item.getType() != Material.EMERALD || !item.hasItemMeta()) {
             return false;
         }
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            PersistentDataContainer data = meta.getPersistentDataContainer();
-            if (data.has(obolKey, PersistentDataType.BYTE)) {
-                return true;
-            }
-            if (meta.hasDisplayName()) {
-                String expected = plugin.getConfig().getString("obols.display-name", "Obol");
-                String actual = meta.getDisplayName();
-                if (actual != null && actual.equalsIgnoreCase(expected)) {
-                    return true;
-                }
-            }
-        }
-        return plugin.getConfig().getBoolean("obols.accept-plain-emeralds", true);
+        PersistentDataContainer data = item.getItemMeta().getPersistentDataContainer();
+        return data.has(obolKey, PersistentDataType.BYTE);
     }
 
     public int countOfficialObols(PlayerInventory inventory) {
@@ -190,6 +192,15 @@ public final class ObolService {
             }
         }
         return capacity >= amount;
+    }
+
+    public enum WithdrawalStatus {
+        FULL,
+        PARTIAL,
+        FAILED
+    }
+
+    public record WithdrawalResult(WithdrawalStatus status, int delivered, int compensated, int unresolved) {
     }
 
     private void giveObols(Player player, int amount) {

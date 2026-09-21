@@ -2,8 +2,9 @@
 
 obols:
   display-name: "Obol"
-  # The resource pack renames Emeralds to Obols client-side. Keep this true so those stacks can be deposited.
-  accept-plain-emeralds: true
+  # Deprecated compatibility switch. Physical Obols are authenticated by server PDC only.
+  # Kept for config compatibility, but no longer grants authenticity.
+  accept-plain-emeralds: false
   lore:
     - "Official currency"
   symbol: "⟡"

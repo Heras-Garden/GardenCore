@@ -189,7 +189,107 @@ public final class ClaimGeometry {
                 return false;
             }
         }
+        for (int i = 0; i < other.vertices.size(); i++) {
+            ClaimPoint a = other.vertices.get(i);
+            ClaimPoint b = other.vertices.get((i + 1) % other.vertices.size());
+            if (!segmentContained(a, b)) {
+                return false;
+            }
+        }
         return true;
+    }
+
+    private boolean segmentContained(ClaimPoint start, ClaimPoint end) {
+        List<Double> cuts = new ArrayList<>();
+        cuts.add(0.0D);
+        cuts.add(1.0D);
+
+        for (int i = 0; i < vertices.size(); i++) {
+            addIntersectionCuts(start, end, vertices.get(i), vertices.get((i + 1) % vertices.size()), cuts);
+        }
+
+        cuts.sort(Double::compareTo);
+        List<Double> unique = new ArrayList<>();
+        for (double value : cuts) {
+            double clamped = Math.max(0.0D, Math.min(1.0D, value));
+            if (unique.isEmpty() || Math.abs(unique.get(unique.size() - 1) - clamped) > 1.0E-9D) {
+                unique.add(clamped);
+            }
+        }
+
+        for (int i = 0; i + 1 < unique.size(); i++) {
+            double left = unique.get(i);
+            double right = unique.get(i + 1);
+            if (right - left <= 1.0E-9D) continue;
+            double t = (left + right) / 2.0D;
+            double x = start.x() + (end.x() - start.x()) * t;
+            double z = start.z() + (end.z() - start.z()) * t;
+            if (!contains2DContinuous(x, z)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void addIntersectionCuts(ClaimPoint a, ClaimPoint b, ClaimPoint c, ClaimPoint d, List<Double> cuts) {
+        double rx = b.x() - a.x();
+        double rz = b.z() - a.z();
+        double sx = d.x() - c.x();
+        double sz = d.z() - c.z();
+        double denominator = rx * sz - rz * sx;
+        double qpx = c.x() - a.x();
+        double qpz = c.z() - a.z();
+
+        if (Math.abs(denominator) > 1.0E-9D) {
+            double t = (qpx * sz - qpz * sx) / denominator;
+            double u = (qpx * rz - qpz * rx) / denominator;
+            if (t >= -1.0E-9D && t <= 1.0D + 1.0E-9D
+                    && u >= -1.0E-9D && u <= 1.0D + 1.0E-9D) {
+                cuts.add(t);
+            }
+            return;
+        }
+
+        if (Math.abs(qpx * rz - qpz * rx) > 1.0E-9D) {
+            return;
+        }
+
+        double lengthSquared = rx * rx + rz * rz;
+        if (lengthSquared <= 1.0E-9D) {
+            return;
+        }
+        cuts.add(((c.x() - a.x()) * rx + (c.z() - a.z()) * rz) / lengthSquared);
+        cuts.add(((d.x() - a.x()) * rx + (d.z() - a.z()) * rz) / lengthSquared);
+    }
+
+    private boolean contains2DContinuous(double x, double z) {
+        if (x < minX - 1.0E-9D || x > maxX + 1.0E-9D || z < minZ - 1.0E-9D || z > maxZ + 1.0E-9D) {
+            return false;
+        }
+        for (int i = 0; i < vertices.size(); i++) {
+            ClaimPoint a = vertices.get(i);
+            ClaimPoint b = vertices.get((i + 1) % vertices.size());
+            if (pointOnSegmentContinuous(x, z, a, b)) {
+                return true;
+            }
+        }
+
+        boolean inside = false;
+        for (int i = 0, j = vertices.size() - 1; i < vertices.size(); j = i++) {
+            ClaimPoint a = vertices.get(i);
+            ClaimPoint b = vertices.get(j);
+            boolean crosses = ((a.z() > z) != (b.z() > z))
+                    && (x < (double) (b.x() - a.x()) * (z - a.z()) / (double) (b.z() - a.z()) + a.x());
+            if (crosses) inside = !inside;
+        }
+        return inside;
+    }
+
+    private static boolean pointOnSegmentContinuous(double x, double z, ClaimPoint a, ClaimPoint b) {
+        double cross = (x - a.x()) * (b.z() - a.z()) - (z - a.z()) * (b.x() - a.x());
+        if (Math.abs(cross) > 1.0E-8D) return false;
+        return x >= Math.min(a.x(), b.x()) - 1.0E-9D && x <= Math.max(a.x(), b.x()) + 1.0E-9D
+                && z >= Math.min(a.z(), b.z()) - 1.0E-9D && z <= Math.max(a.z(), b.z()) + 1.0E-9D;
     }
 
     public boolean isAxisAlignedRectangle() {

@@ -102,7 +102,7 @@ public final class ClaimService {
         }
         return claims.values().stream()
                 .filter(claim -> claim.geometry().contains(location))
-                .max(Comparator.comparingInt(this::depth))
+                .max(resolutionComparator())
                 .orElse(null);
     }
 
@@ -112,7 +112,7 @@ public final class ClaimService {
         }
         return claims.values().stream()
                 .filter(claim -> claim.geometry().contains(location))
-                .sorted(Comparator.comparingInt(this::depth).reversed())
+                .sorted(resolutionComparator().reversed())
                 .toList();
     }
 
@@ -121,6 +121,24 @@ public final class ClaimService {
             return false;
         }
         return possibleAncestor.id().equals(claim.id()) || isAncestor(possibleAncestor, claim);
+    }
+
+    private Comparator<Claim> resolutionComparator() {
+        return Comparator.comparingInt(this::depth)
+                .thenComparingInt(claim -> claimSpecificity(claim.type()))
+                .thenComparing(Comparator.comparingLong((Claim claim) -> claim.geometry().blockAreaEstimate()).reversed())
+                .thenComparing(claim -> claim.id().toString(), Comparator.reverseOrder());
+    }
+
+    private int claimSpecificity(ClaimType type) {
+        return switch (type) {
+            case UNIT -> 6;
+            case HOME -> 5;
+            case PROPERTY -> 4;
+            case PROTECTED -> 3;
+            case DISTRICT -> 2;
+            case TERRITORY -> 1;
+        };
     }
 
     public int depth(Claim claim) {
