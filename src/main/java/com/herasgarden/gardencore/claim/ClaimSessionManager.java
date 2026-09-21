@@ -134,12 +134,12 @@ public final class ClaimSessionManager {
         ClaimGeometry geometry = world == null ? null : session.geometry(world);
         ClaimValidation validation = geometry == null ? null : validation(player, session);
         ClaimChatUi.sendPreviewSummary(player, session, geometry, validation);
-        ClaimChatUi.sendSelectionControls(player, session, validation);
         if (session.type() == ClaimType.UNIT && session.closed()) {
             ClaimChatUi.sendApartmentHeightPrompt(player, session);
         } else if (session.type() == ClaimType.TERRITORY) {
             ClaimChatUi.sendTerritorySetup(player, session);
         }
+        ClaimChatUi.sendSelectionControls(player, session, validation);
     }
 
     public void confirm(Player player) {
@@ -154,8 +154,12 @@ public final class ClaimSessionManager {
         ClaimValidation validation = validation(player, session);
         if (!validation.valid()) {
             Messages.send(player, validation.reason());
+            if (session.type() == ClaimType.UNIT && session.closed()) {
+                ClaimChatUi.sendApartmentHeightPrompt(player, session);
+            } else if (session.type() == ClaimType.TERRITORY) {
+                ClaimChatUi.sendTerritorySetup(player, session);
+            }
             ClaimChatUi.sendSelectionControls(player, session, validation);
-            if (session.type() == ClaimType.TERRITORY) ClaimChatUi.sendTerritorySetup(player, session);
             return;
         }
 

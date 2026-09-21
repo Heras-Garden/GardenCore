@@ -143,12 +143,12 @@ public final class ClaimCommand {
         if (session.shape() == ClaimShape.POLYGON) Messages.send(player, "Select at least three points, then click the first point again to close the boundary.");
         else Messages.send(player, "Select two opposite corners, then click the first point again to close the boundary.");
         if (type == ClaimType.UNIT) Messages.send(player, "After closing the unit boundary, right-click the ceiling, then the floor.");
-        ClaimChatUi.sendSelectionControls(player, session, null);
         if (type == ClaimType.TERRITORY) {
             Messages.send(player, "Government type: " + governmentType.displayName()
                     + ". Confirming this territory will create its government automatically.");
             ClaimChatUi.sendTerritorySetup(player, session);
         }
+        ClaimChatUi.sendSelectionControls(player, session, null);
         return true;
     }
 

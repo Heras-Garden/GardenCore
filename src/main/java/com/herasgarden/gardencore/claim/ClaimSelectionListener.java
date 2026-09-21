@@ -65,13 +65,13 @@ public final class ClaimSelectionListener implements Listener {
                 ClaimGeometry geometry = session.geometry(world);
                 ClaimValidation validation = sessions.validation(player, session);
                 ClaimChatUi.sendPreviewSummary(player, session, geometry, validation);
-                ClaimChatUi.sendSelectionControls(player, session, validation);
                 if (session.type() == ClaimType.UNIT) {
                     Messages.send(player, "Boundary closed. Right-click the ceiling, then right-click the floor.");
                     ClaimChatUi.sendApartmentHeightPrompt(player, session);
                 } else if (session.type() == ClaimType.TERRITORY) {
                     ClaimChatUi.sendTerritorySetup(player, session);
                 }
+                ClaimChatUi.sendSelectionControls(player, session, validation);
             }
             case NEED_MORE_POINTS -> Messages.send(player,
                     session.shape() == ClaimShape.RECTANGLE ? "Select the opposite corner first."

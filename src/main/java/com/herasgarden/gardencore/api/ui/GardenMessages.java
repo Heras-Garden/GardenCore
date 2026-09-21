@@ -20,6 +20,10 @@ public final class GardenMessages {
     public static final TextColor PALE_SKY = TextColor.color(0xC4DDF2);
     public static final TextColor TUSCAN_SUN = TextColor.color(0xF9C349);
     public static final TextColor MUTED_OLIVE = TextColor.color(0xA3B565);
+    public static final TextColor NEUTRAL_GRAY = TextColor.color(0xD6D1D4);
+
+    public static final TextColor LIGHT_PINK = PETAL_FROST;
+    public static final TextColor GARDEN_GREEN = MUTED_OLIVE;
 
     private GardenMessages() {
     }
@@ -37,7 +41,7 @@ public final class GardenMessages {
     }
 
     public static Component info(String message) {
-        return prefix().append(Component.text(message == null ? "" : message, PALE_SKY));
+        return prefix().append(Component.text(message == null ? "" : message, PETAL_FROST));
     }
 
     public static Component warning(String message) {
@@ -49,7 +53,7 @@ public final class GardenMessages {
     }
 
     public static Component action(String label, String command, String hover, TextColor color) {
-        Component component = Component.text(label == null ? "" : label, color == null ? PALE_SKY : color)
+        Component component = Component.text(label == null ? "" : label, color == null ? PETAL_FROST : color)
                 .decorate(TextDecoration.BOLD);
         if (command != null && !command.isBlank()) component = component.clickEvent(ClickEvent.runCommand(command));
         if (hover != null && !hover.isBlank()) component = component.hoverEvent(HoverEvent.showText(Component.text(hover)));
@@ -57,7 +61,7 @@ public final class GardenMessages {
     }
 
     public static Component statusCard(String title, List<Component> lines, Component action) {
-        Component card = Component.text(title == null ? "" : title.toUpperCase(), TUSCAN_SUN)
+        Component card = Component.text(title == null ? "" : title.toUpperCase(), PETAL_FROST)
                 .decorate(TextDecoration.BOLD);
         if (lines != null) {
             for (Component line : lines) card = card.append(Component.newline()).append(line);

@@ -1,6 +1,7 @@
 package com.herasgarden.gardencore.ui;
 
 import com.herasgarden.gardencore.claim.*;
+import com.herasgarden.gardencore.api.ui.GardenMessages;
 import com.herasgarden.gardencore.util.Messages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
@@ -10,12 +11,12 @@ import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.entity.Player;
 
 public final class ClaimChatUi {
-    private static final TextColor PREFIX = Messages.PREFIX_COLOR;
-    private static final TextColor TEXT = TextColor.color(0xFFFFFF);
-    private static final TextColor MUTED = TextColor.color(0xD6D1D4);
-    private static final TextColor ACCENT = TextColor.color(0xF2AFC8);
-    private static final TextColor POSITIVE = TextColor.color(0xA8E6A3);
-    private static final TextColor NEGATIVE = TextColor.color(0xFF9191);
+    private static final TextColor PREFIX = GardenMessages.PREFIX_COLOR;
+    private static final TextColor TEXT = GardenMessages.MESSAGE_COLOR;
+    private static final TextColor MUTED = GardenMessages.NEUTRAL_GRAY;
+    private static final TextColor ACCENT = GardenMessages.PETAL_FROST;
+    private static final TextColor POSITIVE = GardenMessages.MUTED_OLIVE;
+    private static final TextColor NEGATIVE = GardenMessages.BUBBLEGUM_PINK;
 
     private ClaimChatUi() {}
 

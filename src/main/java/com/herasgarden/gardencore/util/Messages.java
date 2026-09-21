@@ -8,7 +8,7 @@ import org.bukkit.command.CommandSender;
 public final class Messages {
     public static final String PREFIX_TEXT = GardenMessages.PREFIX_TEXT;
     public static final TextColor PREFIX_COLOR = GardenMessages.PREFIX_COLOR;
-    public static final TextColor MESSAGE_COLOR = TextColor.color(0xE7E3E5);
+    public static final TextColor MESSAGE_COLOR = GardenMessages.MESSAGE_COLOR;
 
     private Messages() {
     }
