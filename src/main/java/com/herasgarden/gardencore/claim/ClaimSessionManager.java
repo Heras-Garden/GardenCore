@@ -82,7 +82,7 @@ public final class ClaimSessionManager {
             RegisteredServiceProvider<TerritoryGovernmentRegistrar> registration =
                     Bukkit.getServicesManager().getRegistration(TerritoryGovernmentRegistrar.class);
             if (registration == null || registration.getProvider() == null) {
-                return ClaimValidation.invalid("GardenCivics must be enabled before a territory can be founded.");
+                return ClaimValidation.invalid("GardenCivics is not ready. Territories and governments are created together.");
             }
         }
 

@@ -1,5 +1,6 @@
 package com.herasgarden.gardencore.claim;
 
+import com.herasgarden.gardencore.api.civics.TerritoryGovernmentRegistrar;
 import com.herasgarden.gardencore.api.land.GardenCitizenshipDirectory;
 import com.herasgarden.gardencore.organization.Organization;
 import com.herasgarden.gardencore.organization.OrganizationPermission;
@@ -122,7 +123,15 @@ public final class ClaimCommand {
         }
 
         if (type == ClaimType.TERRITORY && !player.hasPermission("gardencore.claim.territory")) {
-            Messages.send(player, "You do not have permission to found a territory yet."); return true;
+            Messages.send(player, "You do not have permission to found a territory."); return true;
+        }
+        if (type == ClaimType.TERRITORY) {
+            RegisteredServiceProvider<TerritoryGovernmentRegistrar> registrar =
+                    Bukkit.getServicesManager().getRegistration(TerritoryGovernmentRegistrar.class);
+            if (registrar == null || registrar.getProvider() == null) {
+                Messages.send(player, "Territories and governments are created together, but GardenCivics is not ready right now.");
+                return true;
+            }
         }
         if (type == ClaimType.PROTECTED && !player.hasPermission("gardencore.claim.admin")) {
             Messages.send(player, "Protected claims are reserved for administrators."); return true;
@@ -136,7 +145,8 @@ public final class ClaimCommand {
         if (type == ClaimType.UNIT) Messages.send(player, "After closing the unit boundary, right-click the ceiling, then the floor.");
         ClaimChatUi.sendSelectionControls(player, session, null);
         if (type == ClaimType.TERRITORY) {
-            Messages.send(player, "Government type: " + governmentType.displayName() + ". Set the territory name and banner flag.");
+            Messages.send(player, "Government type: " + governmentType.displayName()
+                    + ". Confirming this territory will create its government automatically.");
             ClaimChatUi.sendTerritorySetup(player, session);
         }
         return true;

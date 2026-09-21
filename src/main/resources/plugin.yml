@@ -45,8 +45,8 @@ permissions:
     description: Create and manage personal claims.
     default: true
   gardencore.claim.territory:
-    description: Directly create territory claims during development/testing.
-    default: op
+    description: Found one Garden territory; its government is created automatically when the territory is confirmed.
+    default: true
   gardencore.claim.admin:
     description: Bypass GardenCore claim restrictions and manage all claims.
     default: op
