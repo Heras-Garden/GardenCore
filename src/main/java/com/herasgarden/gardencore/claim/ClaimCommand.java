@@ -1,7 +1,7 @@
 package com.herasgarden.gardencore.claim;
 
 import com.herasgarden.gardencore.api.civics.TerritoryGovernmentRegistrar;
-import com.herasgarden.gardencore.api.land.GardenCitizenshipDirectory;
+import com.herasgarden.gardencore.api.membership.TerritoryMembershipProvider;
 import com.herasgarden.gardencore.organization.Organization;
 import com.herasgarden.gardencore.organization.OrganizationPermission;
 import com.herasgarden.gardencore.organization.OrganizationService;
@@ -517,21 +517,21 @@ public final class ClaimCommand {
     }
 
     private List<java.util.UUID> territoryCitizens(Claim claim) {
-        RegisteredServiceProvider<GardenCitizenshipDirectory> registration =
-                Bukkit.getServicesManager().getRegistration(GardenCitizenshipDirectory.class);
+        RegisteredServiceProvider<TerritoryMembershipProvider> registration =
+                Bukkit.getServicesManager().getRegistration(TerritoryMembershipProvider.class);
         if (registration == null || registration.getProvider() == null) return List.of();
-        return registration.getProvider().citizens(claim.id());
+        return registration.getProvider().members(claim.id());
     }
 
     private void clearFormerCitizens(List<java.util.UUID> citizens, Claim claim) {
-        RegisteredServiceProvider<GardenCitizenshipDirectory> registration =
-                Bukkit.getServicesManager().getRegistration(GardenCitizenshipDirectory.class);
+        RegisteredServiceProvider<TerritoryMembershipProvider> registration =
+                Bukkit.getServicesManager().getRegistration(TerritoryMembershipProvider.class);
         if (registration == null || registration.getProvider() == null) return;
-        GardenCitizenshipDirectory directory = registration.getProvider();
+        TerritoryMembershipProvider directory = registration.getProvider();
         String name = claim.name() == null || claim.name().isBlank() ? "your territory" : claim.name();
         for (java.util.UUID citizenId : citizens) {
             try {
-                directory.clearCitizenship(citizenId);
+                directory.clearMembership(citizenId);
                 Player online = Bukkit.getPlayer(citizenId);
                 if (online != null && online.isOnline()) {
                     Messages.send(online, name + " was dissolved. Your citizenship and territory flag were removed.");
