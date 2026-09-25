@@ -65,4 +65,15 @@ public interface PropertyManagementService {
     void delete(UUID propertyId) throws SQLException;
 
     PropertyPurchaseResult purchase(Player buyer, UUID propertyId);
+
+    /**
+     * Purchase a listed property using a Garden account that is not necessarily
+     * backed by an online Bukkit Player (for example a Society citizen).
+     */
+    PropertyPurchaseResult purchaseAccount(
+            UUID buyerId,
+            String buyerName,
+            String buyerKind,
+            UUID propertyId
+    );
 }

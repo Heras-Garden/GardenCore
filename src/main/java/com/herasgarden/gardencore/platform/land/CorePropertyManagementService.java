@@ -166,6 +166,22 @@ public final class CorePropertyManagementService implements PropertyManagementSe
         return new PropertyPurchaseResult(result.success(), result.message(), result.price());
     }
 
+    @Override
+    public PropertyPurchaseResult purchaseAccount(
+            UUID buyerId,
+            String buyerName,
+            String buyerKind,
+            UUID propertyId
+    ) {
+        SqlProperty property = properties.get(propertyId);
+        if (property == null) {
+            return new PropertyPurchaseResult(false, "That property no longer exists.", 0L);
+        }
+        PropertyService.PurchaseResult result =
+                properties.purchaseAccount(buyerId, buyerName, buyerKind, property);
+        return new PropertyPurchaseResult(result.success(), result.message(), result.price());
+    }
+
     private SqlProperty require(UUID propertyId) {
         SqlProperty property = properties.get(propertyId);
         if (property == null) {

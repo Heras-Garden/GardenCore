@@ -432,6 +432,7 @@ public final class ClaimService {
     }
 
     private int ownershipLimit(ClaimType type, ClaimOwnerType ownerType) {
+        if (ownerType == ClaimOwnerType.SOCIETY_CITIZEN) return 0;
         if (ownerType == ClaimOwnerType.GOVERNMENT) return -1;
         if (ownerType == ClaimOwnerType.COMPANY) {
             return switch (type) {

@@ -282,6 +282,35 @@ public final class PropertyService {
     }
 
     public PurchaseResult purchase(Player buyer, SqlProperty property) {
+        return purchaseAccount(
+                buyer.getUniqueId(),
+                buyer.getName(),
+                ClaimOwnerType.PLAYER.name(),
+                property
+        );
+    }
+
+    public PurchaseResult purchaseAccount(
+            UUID buyerId,
+            String buyerName,
+            String buyerKind,
+            SqlProperty property
+    ) {
+        if (buyerId == null || property == null) {
+            return PurchaseResult.failure("A buyer account and property are required.");
+        }
+        ClaimOwnerType buyerType;
+        try {
+            buyerType = ClaimOwnerType.valueOf(
+                    buyerKind == null ? ClaimOwnerType.PLAYER.name() : buyerKind.trim().toUpperCase(Locale.ROOT)
+            );
+        } catch (IllegalArgumentException exception) {
+            return PurchaseResult.failure("That buyer account type cannot own Garden property.");
+        }
+        if (buyerType != ClaimOwnerType.PLAYER && buyerType != ClaimOwnerType.SOCIETY_CITIZEN) {
+            return PurchaseResult.failure("That buyer account type cannot purchase this property.");
+        }
+
         if (!purchasesInProgress.add(property.id())) {
             return PurchaseResult.failure("Someone is already purchasing this property.");
         }
@@ -297,19 +326,25 @@ public final class PropertyService {
             if (blocked.isPresent()) {
                 return PurchaseResult.failure(blocked.get());
             }
-            if (claim.type() == ClaimType.UNIT && claim.tag() == ClaimTag.APARTMENT && !isApartmentSetupComplete(property)) {
-                return PurchaseResult.failure("This apartment is not ready for purchase until both its room sign and mailbox sign are linked.");
+            if (claim.type() == ClaimType.UNIT && claim.tag() == ClaimTag.APARTMENT
+                    && !isApartmentSetupComplete(property)) {
+                return PurchaseResult.failure(
+                        "This apartment is not ready for purchase until both its room sign and mailbox sign are linked.");
             }
             if (claim.ownerType() != ClaimOwnerType.PLAYER) {
-                return PurchaseResult.failure("Government and company property sales will be enabled with organization treasuries.");
+                return PurchaseResult.failure("Only directly player-owned listed property can be purchased right now.");
             }
 
             UUID sellerId = claim.ownerId();
-            if (sellerId.equals(buyer.getUniqueId())) {
+            if (sellerId.equals(buyerId)) {
                 return PurchaseResult.failure("You already own this property.");
             }
-            if (!economy.has(buyer, property.price())) {
-                long missing = Math.max(1L, (long) Math.ceil(property.price() - economy.getBalance(buyer)));
+
+            // Ensure both Garden ledger accounts exist before the atomic sale.
+            long buyerBalance = plugin.currency().balance(buyerId);
+            plugin.currency().balance(sellerId);
+            if (buyerBalance < property.price()) {
+                long missing = Math.max(1L, property.price() - buyerBalance);
                 return PurchaseResult.failure("You need " + missing + " more ⟡ Obols.");
             }
 
@@ -317,78 +352,48 @@ public final class PropertyService {
             try {
                 order = plugin.orders().create(
                         OrderType.PROPERTY_PURCHASE,
-                        buyer.getUniqueId(),
+                        buyerId,
                         "PLAYER",
                         sellerId.toString(),
                         property.price(),
-                        "gardenlands.property-sign",
+                        "gardenlands.property",
                         property.id().toString(),
                         "{\"propertyUuid\":\"" + property.id()
-                                + "\",\"claimUuid\":\"" + property.claimId() + "\"}"
+                                + "\",\"claimUuid\":\"" + property.claimId()
+                                + "\",\"buyerKind\":\"" + buyerType.name()
+                                + "\",\"buyerName\":\"" + json(buyerName) + "\"}"
                 );
-                plugin.orders().transition(order.id(), OrderState.READY, "Property sign purchase prepared");
+                plugin.orders().transition(order.id(), OrderState.READY, "Property purchase prepared");
                 plugin.orders().transition(order.id(), OrderState.AWAITING_CONFIRMATION,
-                        "Player confirmed property sign purchase");
+                        "Property buyer confirmed purchase");
                 plugin.orders().transition(order.id(), OrderState.PAYMENT_PENDING,
-                        "Collecting property purchase payment");
+                        "Applying atomic property ledger transfer");
             } catch (SQLException exception) {
                 plugin.getLogger().warning("Could not prepare property purchase order for "
                         + property.id() + ": " + exception.getMessage());
                 return PurchaseResult.failure("The property purchase could not be prepared right now.");
             }
 
-            EconomyResponse withdrawal = economy.withdrawPlayer(buyer, property.price());
-            if (!withdrawal.transactionSuccess()) {
-                transitionOrder(order.id(), OrderState.PAYMENT_FAILED, "Buyer payment could not be withdrawn");
-                return PurchaseResult.failure("The payment could not be completed.");
-            }
-            transitionOrder(order.id(), OrderState.PAID, "Property purchase paid");
-            transitionOrder(order.id(), OrderState.FULFILLING, "Transferring property ownership");
-
-            ClaimOwnerType oldType = claim.ownerType();
-            UUID oldOwner = claim.ownerId();
             try {
-                repository.completeSale(property, ClaimOwnerType.PLAYER, buyer.getUniqueId());
-                claim.setOwner(ClaimOwnerType.PLAYER, buyer.getUniqueId());
+                repository.completeSaleWithLedger(
+                        property,
+                        buyerType,
+                        buyerId,
+                        sellerId,
+                        property.price()
+                );
+                claim.setOwner(buyerType, buyerId);
                 property.setForSale(false);
             } catch (SQLException exception) {
-                EconomyResponse refund = economy.depositPlayer(buyer, property.price());
-                transitionOrder(order.id(),
-                        refund.transactionSuccess() ? OrderState.REFUNDED : OrderState.FULFILLMENT_FAILED,
-                        refund.transactionSuccess()
-                                ? "Property transfer failed; buyer payment returned"
-                                : "Property transfer failed and automatic buyer refund failed");
-                plugin.getLogger().severe("Property sale database transaction failed for " + property.id() + ": "
-                        + exception.getMessage());
-                return PurchaseResult.failure(refund.transactionSuccess()
-                        ? "The property could not be transferred. Your Obols were returned."
-                        : "The property transfer failed and needs administrator review.");
-            }
-
-            OfflinePlayer seller = Bukkit.getOfflinePlayer(sellerId);
-            EconomyResponse sellerPayment = economy.depositPlayer(seller, property.price());
-            if (!sellerPayment.transactionSuccess()) {
-                try {
-                    repository.rollbackSale(property, oldType, oldOwner);
-                    claim.setOwner(oldType, oldOwner);
-                    property.setForSale(true);
-                    EconomyResponse refund = economy.depositPlayer(buyer, property.price());
-                    transitionOrder(order.id(),
-                            refund.transactionSuccess() ? OrderState.REFUNDED : OrderState.FULFILLMENT_FAILED,
-                            refund.transactionSuccess()
-                                    ? "Seller payment failed; ownership rolled back and buyer refunded"
-                                    : "Seller payment failed; ownership rolled back but buyer refund failed");
-                } catch (SQLException rollbackFailure) {
-                    transitionOrder(order.id(), OrderState.FULFILLMENT_FAILED,
-                            "Seller payment failed and ownership rollback requires admin review");
-                    plugin.getLogger().severe("CRITICAL: property sale rollback failed for " + property.id()
-                            + ". Manual admin recovery is required: " + rollbackFailure.getMessage());
-                    return PurchaseResult.failure("The sale needs administrator review. No additional action should be taken.");
-                }
-                return PurchaseResult.failure("The seller could not be paid. The sale was cancelled and your Obols were returned.");
+                transitionOrder(order.id(), OrderState.PAYMENT_FAILED,
+                        "Atomic property sale failed: " + exception.getMessage());
+                return PurchaseResult.failure(
+                        "The property purchase did not complete. No ownership or balance changes were committed.");
             }
 
             refreshSigns(property);
+            transitionOrder(order.id(), OrderState.PAID, "Property purchase ledger committed");
+            transitionOrder(order.id(), OrderState.FULFILLING, "Property ownership committed");
             transitionOrder(order.id(), OrderState.COMPLETED, "Property ownership transferred and seller paid");
             try {
                 plugin.integrations().publish(
@@ -397,7 +402,8 @@ public final class PropertyService {
                         property.id().toString(),
                         "{\"propertyUuid\":\"" + property.id()
                                 + "\",\"claimUuid\":\"" + property.claimId()
-                                + "\",\"buyerUuid\":\"" + buyer.getUniqueId()
+                                + "\",\"buyerUuid\":\"" + buyerId
+                                + "\",\"buyerKind\":\"" + buyerType.name()
                                 + "\",\"sellerUuid\":\"" + sellerId
                                 + "\",\"amount\":" + property.price() + "}"
                 );
@@ -409,6 +415,12 @@ public final class PropertyService {
         } finally {
             purchasesInProgress.remove(property.id());
         }
+    }
+
+    private String json(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r");
     }
 
     private void transitionOrder(UUID orderId, OrderState state, String detail) {
@@ -471,6 +483,9 @@ public final class PropertyService {
             OfflinePlayer player = Bukkit.getOfflinePlayer(claim.ownerId());
             String name = player.getName();
             return name == null || name.isBlank() ? claim.ownerId().toString().substring(0, 8) : name;
+        }
+        if (claim.ownerType() == ClaimOwnerType.SOCIETY_CITIZEN) {
+            return "Society Resident";
         }
         Organization organization = organizations.get(claim.ownerId());
         if (organization != null) {
