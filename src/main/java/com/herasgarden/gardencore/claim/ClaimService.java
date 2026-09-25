@@ -243,7 +243,7 @@ public final class ClaimService {
             }
         }
 
-        if (type == ClaimType.HOME && ownerType == ClaimOwnerType.PLAYER && profiles != null) {
+        if (type == ClaimType.HOME && ownerType == ClaimOwnerType.PLAYER && parentId == null && profiles != null) {
             long available = profiles.availableHomeBlocks(ownerId);
             if (area > available) {
                 return ClaimValidation.invalid("This home needs " + area + " claim blocks, but you only have "
@@ -457,6 +457,7 @@ public final class ClaimService {
         return claims.values().stream()
                 .filter(claim -> claim.type() == ClaimType.HOME)
                 .filter(claim -> claim.ownerType() == ClaimOwnerType.PLAYER && claim.ownerId().equals(playerId))
+                .filter(claim -> claim.parentId() == null)
                 .mapToLong(claim -> claim.geometry().blockAreaEstimate())
                 .sum();
     }
