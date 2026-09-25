@@ -115,3 +115,8 @@ marriage:
   # Total marriage cost. Each player pays half when the proposal is accepted.
   cost: 500
   proposal-expire-seconds: 120
+
+# Shared Garden in-game calendar. Leave world blank to use the first loaded world.
+calendar:
+  world: ""
+  refresh-ticks: 20
