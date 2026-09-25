@@ -25,6 +25,7 @@ import com.herasgarden.gardencore.organization.OrganizationService;
 import com.herasgarden.gardencore.platform.PlatformSchema;
 import com.herasgarden.gardencore.platform.claim.CoreClaimOwnershipBridge;
 import com.herasgarden.gardencore.platform.calendar.SqlGardenCalendar;
+import com.herasgarden.gardencore.calendar.CalendarCommand;
 import com.herasgarden.gardencore.platform.economy.GardenBalanceService;
 import com.herasgarden.gardencore.platform.economy.GardenVaultEconomyProvider;
 import com.herasgarden.gardencore.platform.economy.VaultGardenEconomy;
@@ -112,6 +113,12 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         }
         getServer().getServicesManager().register(
                 GardenCalendar.class, gardenCalendar, this, ServicePriority.Normal);
+        PluginCommand calendar = getCommand("calendar");
+        if (calendar != null) {
+            CalendarCommand calendarCommand = new CalendarCommand(gardenCalendar);
+            calendar.setExecutor(calendarCommand);
+            calendar.setTabCompleter(calendarCommand);
+        }
         marriageService = new MarriageService(this, databaseManager, gardenEconomy);
         try {
             marriageService.load();
