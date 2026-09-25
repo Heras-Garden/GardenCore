@@ -33,6 +33,10 @@ commands:
   marry:
     description: Propose marriage, respond to proposals, or manage your marriage.
     usage: /marry <player|accept|deny|cancel|info|divorce>
+  calendar:
+    description: View Garden time or toggle the calendar HUD.
+    usage: /calendar [hud on|off|toggle]
+    permission: gardencore.calendar
 
 permissions:
   gardencore.obol:
@@ -54,6 +58,9 @@ permissions:
     description: Create a GardenCore company.
     default: true
 
+  gardencore.calendar:
+    description: View Garden time and toggle the personal calendar HUD.
+    default: true
   gardencore.horse.admin:
     description: Manage horse access on any tamed horse.
     default: op
