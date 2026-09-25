@@ -145,6 +145,25 @@ public final class CorePropertyManagementService implements PropertyManagementSe
     }
 
     @Override
+    public String buyerAudience(UUID propertyId) {
+        SqlProperty property = require(propertyId);
+        return property.buyerAudience();
+    }
+
+    @Override
+    public PropertyAddress setBuyerAudience(UUID propertyId, String audience) throws SQLException {
+        SqlProperty property = require(propertyId);
+        properties.setBuyerAudience(property, audience);
+        return view(property);
+    }
+
+    @Override
+    public boolean inheritAccount(UUID propertyId, UUID expectedOwnerId, UUID newOwnerId,
+                                  String newOwnerName, String newOwnerKind) throws SQLException {
+        return properties.inheritAccount(require(propertyId), expectedOwnerId, newOwnerId, newOwnerKind);
+    }
+
+    @Override
     public PropertyAddress takeOffMarket(UUID propertyId) throws SQLException {
         SqlProperty property = require(propertyId);
         properties.takeOffMarket(property);

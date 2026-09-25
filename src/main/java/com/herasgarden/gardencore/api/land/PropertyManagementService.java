@@ -60,6 +60,18 @@ public interface PropertyManagementService {
 
     PropertyAddress setForSale(UUID propertyId, long price) throws SQLException;
 
+    String buyerAudience(UUID propertyId);
+
+    PropertyAddress setBuyerAudience(UUID propertyId, String audience) throws SQLException;
+
+    boolean inheritAccount(
+            UUID propertyId,
+            UUID expectedOwnerId,
+            UUID newOwnerId,
+            String newOwnerName,
+            String newOwnerKind
+    ) throws SQLException;
+
     PropertyAddress takeOffMarket(UUID propertyId) throws SQLException;
 
     void delete(UUID propertyId) throws SQLException;

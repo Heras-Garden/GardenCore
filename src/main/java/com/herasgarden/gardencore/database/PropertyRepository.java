@@ -31,6 +31,7 @@ public final class PropertyRepository {
                         result.getString("unit_label"),
                         result.getLong("price"),
                         result.getInt("for_sale") != 0,
+                        result.getString("buyer_audience"),
                         Instant.ofEpochMilli(result.getLong("created_at"))
                 ));
             }
@@ -77,7 +78,7 @@ public final class PropertyRepository {
         try (Connection connection = database.connection();
              PreparedStatement statement = connection.prepareStatement(
                      "INSERT INTO gc_properties (property_uuid, claim_uuid, scope_key, road, road_key, number, number_key, "
-                             + "unit_label, unit_key, price, for_sale, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                             + "unit_label, unit_key, price, for_sale, buyer_audience, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             statement.setString(1, property.id().toString());
             statement.setString(2, property.claimId().toString());
             statement.setString(3, property.scopeKey());
@@ -89,7 +90,8 @@ public final class PropertyRepository {
             statement.setString(9, SqlProperty.normalize(property.unit()));
             statement.setLong(10, property.price());
             statement.setInt(11, property.forSale() ? 1 : 0);
-            statement.setLong(12, property.createdAt().toEpochMilli());
+            statement.setString(12, property.buyerAudience());
+            statement.setLong(13, property.createdAt().toEpochMilli());
             statement.executeUpdate();
         }
     }
@@ -122,6 +124,32 @@ public final class PropertyRepository {
             if (statement.executeUpdate() != 1) {
                 throw new SQLException("Property sale update affected no rows for " + propertyId);
             }
+        }
+    }
+
+    public void setBuyerAudience(UUID propertyId, String audience) throws SQLException {
+        try (Connection connection = database.connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE gc_properties SET buyer_audience = ? WHERE property_uuid = ?")) {
+            statement.setString(1, SqlProperty.normalizeAudience(audience));
+            statement.setString(2, propertyId.toString());
+            if (statement.executeUpdate() != 1) {
+                throw new SQLException("Property audience update affected no rows for " + propertyId);
+            }
+        }
+    }
+
+    public boolean inheritOwnership(SqlProperty property, UUID expectedOwnerId,
+                                    ClaimOwnerType newOwnerType, UUID newOwnerId) throws SQLException {
+        try (Connection connection = database.connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE gc_claims SET owner_type=?, owner_uuid=? "
+                             + "WHERE claim_uuid=? AND owner_uuid=?")) {
+            statement.setString(1, newOwnerType.name());
+            statement.setString(2, newOwnerId.toString());
+            statement.setString(3, property.claimId().toString());
+            statement.setString(4, expectedOwnerId.toString());
+            return statement.executeUpdate() == 1;
         }
     }
 

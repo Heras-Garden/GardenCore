@@ -13,7 +13,7 @@ import java.sql.Statement;
 import java.util.Locale;
 
 public final class DatabaseManager implements AutoCloseable {
-    private static final int SCHEMA_VERSION = 5;
+    private static final int SCHEMA_VERSION = 6;
 
     private final GardenCore plugin;
     private HikariDataSource dataSource;
@@ -109,6 +109,11 @@ public final class DatabaseManager implements AutoCloseable {
             migrateToV5();
             setVersion(5);
             current = 5;
+        }
+        if (current < 6) {
+            migrateToV6();
+            setVersion(6);
+            current = 6;
         }
 
         if (current > SCHEMA_VERSION) {
@@ -243,6 +248,13 @@ public final class DatabaseManager implements AutoCloseable {
                     + "created_at BIGINT NOT NULL)");
             statement.executeUpdate("CREATE UNIQUE INDEX IF NOT EXISTS idx_gc_territory_name "
                     + "ON gc_territories (name_key)");
+        }
+    }
+
+    private void migrateToV6() throws SQLException {
+        try (Connection connection = connection()) {
+            ensureColumn(connection, "gc_properties", "buyer_audience",
+                    "ALTER TABLE gc_properties ADD COLUMN buyer_audience VARCHAR(16) NOT NULL DEFAULT 'ANY'");
         }
     }
 

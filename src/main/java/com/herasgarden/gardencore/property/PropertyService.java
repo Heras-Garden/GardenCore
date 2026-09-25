@@ -136,7 +136,7 @@ public final class PropertyService {
         }
 
         SqlProperty property = new SqlProperty(UUID.randomUUID(), claim.id(), "global",
-                road, number, unit, 0L, false, Instant.now());
+                road, number, unit, 0L, false, "ANY", Instant.now());
         repository.insert(property);
         byId.put(property.id(), property);
         byClaim.put(property.claimId(), property);
@@ -173,6 +173,32 @@ public final class PropertyService {
         property.setPrice(price);
         property.setForSale(true);
         refreshSigns(property);
+    }
+
+    public void setBuyerAudience(SqlProperty property, String audience) throws SQLException {
+        String normalized = SqlProperty.normalizeAudience(audience);
+        repository.setBuyerAudience(property.id(), normalized);
+        property.setBuyerAudience(normalized);
+        refreshSigns(property);
+    }
+
+    public boolean inheritAccount(SqlProperty property, UUID expectedOwnerId,
+                                  UUID newOwnerId, String newOwnerKind) throws SQLException {
+        ClaimOwnerType newType;
+        try {
+            newType = ClaimOwnerType.valueOf(newOwnerKind == null ? "" : newOwnerKind.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("That account type cannot inherit Garden property.");
+        }
+        if (newType != ClaimOwnerType.PLAYER && newType != ClaimOwnerType.SOCIETY_CITIZEN) {
+            throw new IllegalArgumentException("That account type cannot inherit Garden property.");
+        }
+        Claim claim = claims.get(property.claimId());
+        if (claim == null || !claim.ownerId().equals(expectedOwnerId)) return false;
+        if (!repository.inheritOwnership(property, expectedOwnerId, newType, newOwnerId)) return false;
+        claim.setOwner(newType, newOwnerId);
+        refreshSigns(property);
+        return true;
     }
 
     public void takeOffMarket(SqlProperty property) throws SQLException {
@@ -318,6 +344,13 @@ public final class PropertyService {
             if (!property.forSale()) {
                 return PurchaseResult.failure("This property is not for sale.");
             }
+            String audience = property.buyerAudience();
+            if ("PLAYER".equals(audience) && buyerType != ClaimOwnerType.PLAYER) {
+                return PurchaseResult.failure("This property is listed for player buyers only.");
+            }
+            if ("SOCIETY".equals(audience) && buyerType != ClaimOwnerType.SOCIETY_CITIZEN) {
+                return PurchaseResult.failure("This property is reserved for Society residents.");
+            }
             Claim claim = claims.get(property.claimId());
             if (claim == null) {
                 return PurchaseResult.failure("The claim linked to this property is missing.");
@@ -353,7 +386,7 @@ public final class PropertyService {
                 order = plugin.orders().create(
                         OrderType.PROPERTY_PURCHASE,
                         buyerId,
-                        "PLAYER",
+                        buyerType.name(),
                         sellerId.toString(),
                         property.price(),
                         "gardenlands.property",
