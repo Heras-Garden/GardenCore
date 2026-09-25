@@ -112,6 +112,18 @@ public final class PlatformSchema {
                     + "ON gc_marriages (player1_uuid)");
             statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_gc_marriages_player2 "
                     + "ON gc_marriages (player2_uuid)");
+
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS gc_calendar_state ("
+                    + "id INTEGER PRIMARY KEY,"
+                    + "garden_day BIGINT NOT NULL,"
+                    + "last_full_time BIGINT NOT NULL,"
+                    + "minute_of_day INTEGER NOT NULL,"
+                    + "updated_at BIGINT NOT NULL)");
+
+            statement.executeUpdate("CREATE TABLE IF NOT EXISTS gc_calendar_hud ("
+                    + "player_uuid VARCHAR(36) PRIMARY KEY,"
+                    + "enabled INTEGER NOT NULL DEFAULT 0,"
+                    + "updated_at BIGINT NOT NULL)");
         }
     }
 }

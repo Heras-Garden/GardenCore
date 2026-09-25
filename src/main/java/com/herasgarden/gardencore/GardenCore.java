@@ -2,6 +2,7 @@ package com.herasgarden.gardencore;
 
 import com.herasgarden.gardencore.api.GardenPlatform;
 import com.herasgarden.gardencore.api.claim.ClaimOwnershipBridge;
+import com.herasgarden.gardencore.api.calendar.GardenCalendar;
 import com.herasgarden.gardencore.api.claim.ClaimBlockService;
 import com.herasgarden.gardencore.api.economy.GardenEconomy;
 import com.herasgarden.gardencore.api.integration.IntegrationInbox;
@@ -23,6 +24,7 @@ import com.herasgarden.gardencore.organization.OrganizationRepository;
 import com.herasgarden.gardencore.organization.OrganizationService;
 import com.herasgarden.gardencore.platform.PlatformSchema;
 import com.herasgarden.gardencore.platform.claim.CoreClaimOwnershipBridge;
+import com.herasgarden.gardencore.platform.calendar.SqlGardenCalendar;
 import com.herasgarden.gardencore.platform.economy.GardenBalanceService;
 import com.herasgarden.gardencore.platform.economy.GardenVaultEconomyProvider;
 import com.herasgarden.gardencore.platform.economy.VaultGardenEconomy;
@@ -81,6 +83,7 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     private OrganizationDirectory organizationDirectory;
     private PropertyManagementService propertyManagementService;
     private MarriageService marriageService;
+    private SqlGardenCalendar gardenCalendar;
 
     @Override
     public void onEnable() {
@@ -100,6 +103,15 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         getServer().getServicesManager().register(OrganizationDirectory.class, organizationDirectory, this, ServicePriority.Normal);
         getServer().getServicesManager().register(
                 PropertyManagementService.class, propertyManagementService, this, ServicePriority.Normal);
+        try {
+            gardenCalendar = new SqlGardenCalendar(this, gardenStorage);
+        } catch (SQLException exception) {
+            getLogger().severe("Garden calendar could not start: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        getServer().getServicesManager().register(
+                GardenCalendar.class, gardenCalendar, this, ServicePriority.Normal);
         marriageService = new MarriageService(this, databaseManager, gardenEconomy);
         try {
             marriageService.load();
@@ -208,6 +220,14 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             }
         }, 20L * 60L, 20L * 60L * 60L * 24L);
 
+        long calendarTicks = Math.max(20L, getConfig().getLong("calendar.refresh-ticks", 20L));
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            org.bukkit.World world = calendarWorld();
+            if (world == null || gardenCalendar == null) return;
+            gardenCalendar.updateFromWorld(world.getFullTime(), world.getTime());
+            gardenCalendar.refreshHud(getServer().getOnlinePlayers());
+        }, 1L, calendarTicks);
+
         emeraldOreService = new EmeraldOreService(this);
         emeraldOreService.start();
 
@@ -225,6 +245,9 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
         }
         if (legacyPropertyRegistry != null) {
             legacyPropertyRegistry.saveQuietly();
+        }
+        if (gardenCalendar != null) {
+            gardenCalendar.hideAll();
         }
         if (emeraldOreService != null) {
             emeraldOreService.stop();
@@ -270,6 +293,15 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     @Override
     public GardenEconomy currency() {
         return gardenEconomy;
+    }
+
+    private org.bukkit.World calendarWorld() {
+        String configured = getConfig().getString("calendar.world", "").trim();
+        if (!configured.isBlank()) {
+            org.bukkit.World world = getServer().getWorld(configured);
+            if (world != null) return world;
+        }
+        return getServer().getWorlds().isEmpty() ? null : getServer().getWorlds().getFirst();
     }
 
     private void registerShortCommand(String name, GardenCommand gardenCommand, String root) {
