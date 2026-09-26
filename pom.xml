@@ -6,7 +6,7 @@
 
     <groupId>com.herasgarden</groupId>
     <artifactId>gardencore</artifactId>
-    <version>0.3.0-SNAPSHOT</version>
+    <version>0.4.0-SNAPSHOT</version>
     <name>GardenCore</name>
     <description>Shared platform services for The Garden SMP plugin family.</description>
 

@@ -48,11 +48,13 @@ import com.herasgarden.gardencore.claim.AdminClaimCommand;
 import com.herasgarden.gardencore.worldguard.WorldGuardHook;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public final class GardenCore extends JavaPlugin implements GardenPlatform {
     private Economy economy;
@@ -89,6 +91,11 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+
+        if (!suiteVersionsMatch()) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         Economy previousEconomy = currentEconomyProvider();
         if (!setupDatabase(previousEconomy)) {
@@ -234,6 +241,14 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             gardenCalendar.updateFromWorld(world.getFullTime(), world.getTime());
             gardenCalendar.refreshHud(getServer().getOnlinePlayers());
         }, 1L, calendarTicks);
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (gardenCalendar == null) return;
+            try {
+                gardenCalendar.persistNow();
+            } catch (SQLException exception) {
+                getLogger().warning("Garden calendar state could not be persisted: " + exception.getMessage());
+            }
+        }, 1200L, 1200L);
 
         emeraldOreService = new EmeraldOreService(this);
         emeraldOreService.start();
@@ -254,6 +269,12 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             legacyPropertyRegistry.saveQuietly();
         }
         if (gardenCalendar != null) {
+            try {
+                gardenCalendar.persistNow();
+            } catch (SQLException exception) {
+                getLogger().warning("Garden calendar state could not be persisted during shutdown: "
+                        + exception.getMessage());
+            }
             gardenCalendar.hideAll();
         }
         if (emeraldOreService != null) {
@@ -300,6 +321,29 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
     @Override
     public GardenEconomy currency() {
         return gardenEconomy;
+    }
+
+    private boolean suiteVersionsMatch() {
+        String expected = getDescription().getVersion();
+        List<String> coordinated = List.of(
+                "GardenCore", "GardenLands", "GardenTrade", "GardenCivics", "GardenEvents",
+                "GardenEssentials", "GardenModeration", "GardenPost", "GardenCosmetics", "GardenSociety");
+        boolean valid = true;
+        for (String name : coordinated) {
+            Plugin plugin = getServer().getPluginManager().getPlugin(name);
+            if (plugin == null) continue;
+            String installed = plugin.getDescription().getVersion();
+            if (!expected.equals(installed)) {
+                valid = false;
+                getLogger().severe("Garden suite version mismatch: " + name + " is " + installed
+                        + " but this coordinated release is " + expected + ".");
+            }
+        }
+        if (!valid) {
+            getLogger().severe(
+                    "Refusing to start a mixed Garden suite. Install all coordinated Garden domain plugins together.");
+        }
+        return valid;
     }
 
     private org.bukkit.World calendarWorld() {

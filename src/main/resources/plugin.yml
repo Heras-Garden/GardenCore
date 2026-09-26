@@ -34,8 +34,8 @@ commands:
     description: Propose marriage, respond to proposals, or manage your marriage.
     usage: /marry <player|accept|deny|cancel|info|divorce>
   calendar:
-    description: View Garden time or toggle the calendar HUD.
-    usage: /calendar [hud on|off|toggle]
+    description: View Garden time and configure the personal calendar display.
+    usage: /calendar [hud on|off|toggle|format 12|24]
     permission: gardencore.calendar
 
 permissions:

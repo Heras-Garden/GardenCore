@@ -3,6 +3,7 @@ package com.herasgarden.gardencore.platform;
 import com.herasgarden.gardencore.database.DatabaseManager;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -123,7 +124,20 @@ public final class PlatformSchema {
             statement.executeUpdate("CREATE TABLE IF NOT EXISTS gc_calendar_hud ("
                     + "player_uuid VARCHAR(36) PRIMARY KEY,"
                     + "enabled INTEGER NOT NULL DEFAULT 0,"
+                    + "time_format VARCHAR(8) NOT NULL DEFAULT '24H',"
                     + "updated_at BIGINT NOT NULL)");
+            ensureColumn(connection, "gc_calendar_hud", "time_format",
+                    "ALTER TABLE gc_calendar_hud ADD COLUMN time_format VARCHAR(8) NOT NULL DEFAULT '24H'");
+        }
+    }
+
+    private static void ensureColumn(Connection connection, String table, String column, String ddl)
+            throws SQLException {
+        try (ResultSet result = connection.getMetaData().getColumns(null, null, table, column)) {
+            if (result.next()) return;
+        }
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate(ddl);
         }
     }
 }

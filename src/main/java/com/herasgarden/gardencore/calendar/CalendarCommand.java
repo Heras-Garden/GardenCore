@@ -23,52 +23,63 @@ public final class CalendarCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         GardenCalendar.CalendarSnapshot snapshot = calendar.snapshot();
         if (args.length == 0) {
-            GardenMessages.send(sender, snapshot.formattedTime() + ".");
+            boolean use24Hour = !(sender instanceof Player player)
+                    || calendar.uses24HourTime(player.getUniqueId());
+            GardenMessages.send(sender, snapshot.formattedTime(use24Hour) + ".");
             if (sender instanceof Player player) {
-                try {
-                    GardenMessages.send(player, "Calendar HUD: "
-                            + (calendar.hudEnabled(player.getUniqueId()) ? "ON" : "OFF")
-                            + ". Use /calendar hud toggle.");
-                } catch (SQLException exception) {
-                    GardenMessages.send(player, "Calendar HUD preference could not be read.");
-                }
+                GardenMessages.send(player, "Calendar HUD: "
+                        + (calendar.hudEnabled(player.getUniqueId()) ? "ON" : "OFF")
+                        + " | Time format: "
+                        + (calendar.uses24HourTime(player.getUniqueId()) ? "24-hour" : "12-hour") + ".");
             }
             return true;
         }
-
         if (!(sender instanceof Player player)) {
-            GardenMessages.send(sender, "Only players can change calendar HUD settings.");
+            GardenMessages.send(sender, "Only players can change calendar display settings.");
             return true;
         }
-        if (!args[0].equalsIgnoreCase("hud")) {
-            GardenMessages.send(player, "Use /calendar or /calendar hud <on|off|toggle>.");
-            return true;
-        }
-
-        String mode = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "toggle";
         try {
-            boolean current = calendar.hudEnabled(player.getUniqueId());
-            boolean enabled = switch (mode) {
-                case "on" -> true;
-                case "off" -> false;
-                case "toggle" -> !current;
-                default -> throw new IllegalArgumentException("Use /calendar hud <on|off|toggle>.");
-            };
-            calendar.setHudEnabled(player.getUniqueId(), enabled);
-            GardenMessages.send(player, "Calendar HUD " + (enabled ? "enabled" : "disabled") + ".");
+            if (args[0].equalsIgnoreCase("hud")) {
+                String mode = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "toggle";
+                boolean current = calendar.hudEnabled(player.getUniqueId());
+                boolean enabled = switch (mode) {
+                    case "on" -> true;
+                    case "off" -> false;
+                    case "toggle" -> !current;
+                    default -> throw new IllegalArgumentException("Use /calendar hud <on|off|toggle>.");
+                };
+                calendar.setHudEnabled(player.getUniqueId(), enabled);
+                GardenMessages.send(player, "Calendar HUD " + (enabled ? "enabled" : "disabled") + ".");
+                return true;
+            }
+            if (args[0].equalsIgnoreCase("format")) {
+                if (args.length < 2 || (!args[1].equals("12") && !args[1].equals("24"))) {
+                    throw new IllegalArgumentException("Use /calendar format <12|24>.");
+                }
+                boolean use24Hour = args[1].equals("24");
+                calendar.setUses24HourTime(player.getUniqueId(), use24Hour);
+                GardenMessages.send(player, "Calendar time format set to "
+                        + (use24Hour ? "24-hour" : "12-hour") + ".");
+                return true;
+            }
+            throw new IllegalArgumentException(
+                    "Use /calendar, /calendar hud <on|off|toggle>, or /calendar format <12|24>.");
         } catch (IllegalArgumentException exception) {
             GardenMessages.send(player, exception.getMessage());
         } catch (SQLException exception) {
-            GardenMessages.send(player, "Calendar HUD preference could not be saved.");
+            GardenMessages.send(player, "Calendar preference could not be saved.");
         }
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) return match(args[0], List.of("hud"));
+        if (args.length == 1) return match(args[0], List.of("hud", "format"));
         if (args.length == 2 && args[0].equalsIgnoreCase("hud")) {
             return match(args[1], List.of("on", "off", "toggle"));
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("format")) {
+            return match(args[1], List.of("12", "24"));
         }
         return List.of();
     }

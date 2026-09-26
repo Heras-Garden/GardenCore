@@ -20,6 +20,8 @@ public final class SqlGardenCalendar implements GardenCalendar {
     private final JavaPlugin plugin;
     private final GardenStorage storage;
     private final Map<UUID, BossBar> bars = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> hudPreferences = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> time24Preferences = new ConcurrentHashMap<>();
 
     private volatile long gardenDay;
     private volatile long lastFullTime;
@@ -29,6 +31,7 @@ public final class SqlGardenCalendar implements GardenCalendar {
         this.plugin = plugin;
         this.storage = storage;
         load();
+        loadPreferences();
     }
 
     private void load() throws SQLException {
@@ -50,18 +53,21 @@ public final class SqlGardenCalendar implements GardenCalendar {
     }
 
     public synchronized void updateFromWorld(long fullTime, long time) {
-        long previousWorldDay = Math.floorDiv(lastFullTime, 24000L);
-        long currentWorldDay = Math.floorDiv(fullTime, 24000L);
+        long previousWorldDay = midnightDayIndex(lastFullTime);
+        long currentWorldDay = midnightDayIndex(fullTime);
         if (lastFullTime > 0L && currentWorldDay > previousWorldDay) {
             gardenDay += currentWorldDay - previousWorldDay;
         }
         lastFullTime = fullTime;
         minuteOfDay = (int) (Math.floorMod(time + 6000L, 24000L) * 1440L / 24000L);
-        try {
-            persist();
-        } catch (SQLException exception) {
-            plugin.getLogger().warning("Garden calendar state could not be persisted: " + exception.getMessage());
-        }
+    }
+
+    private long midnightDayIndex(long fullTime) {
+        return Math.floorDiv(fullTime + 6000L, 24000L);
+    }
+
+    public synchronized void persistNow() throws SQLException {
+        persist();
     }
 
     private void persist() throws SQLException {
@@ -93,39 +99,30 @@ public final class SqlGardenCalendar implements GardenCalendar {
         return new CalendarSnapshot(gardenDay, minuteOfDay, Weekday.forDay(gardenDay));
     }
 
-    @Override
-    public boolean hudEnabled(UUID playerId) throws SQLException {
+    private void loadPreferences() throws SQLException {
+        hudPreferences.clear();
+        time24Preferences.clear();
         try (Connection connection = storage.connection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT enabled FROM gc_calendar_hud WHERE player_uuid=?")) {
-            statement.setString(1, playerId.toString());
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getInt(1) != 0;
+                     "SELECT player_uuid,enabled,time_format FROM gc_calendar_hud");
+             ResultSet result = statement.executeQuery()) {
+            while (result.next()) {
+                UUID playerId = UUID.fromString(result.getString("player_uuid"));
+                hudPreferences.put(playerId, result.getInt("enabled") != 0);
+                time24Preferences.put(playerId, !"12H".equalsIgnoreCase(result.getString("time_format")));
             }
         }
     }
 
     @Override
+    public boolean hudEnabled(UUID playerId) {
+        return hudPreferences.getOrDefault(playerId, false);
+    }
+
+    @Override
     public void setHudEnabled(UUID playerId, boolean enabled) throws SQLException {
-        try (Connection connection = storage.connection()) {
-            int changed;
-            try (PreparedStatement update = connection.prepareStatement(
-                    "UPDATE gc_calendar_hud SET enabled=?,updated_at=? WHERE player_uuid=?")) {
-                update.setInt(1, enabled ? 1 : 0);
-                update.setLong(2, System.currentTimeMillis());
-                update.setString(3, playerId.toString());
-                changed = update.executeUpdate();
-            }
-            if (changed == 0) {
-                try (PreparedStatement insert = connection.prepareStatement(
-                        "INSERT INTO gc_calendar_hud (player_uuid,enabled,updated_at) VALUES (?,?,?)")) {
-                    insert.setString(1, playerId.toString());
-                    insert.setInt(2, enabled ? 1 : 0);
-                    insert.setLong(3, System.currentTimeMillis());
-                    insert.executeUpdate();
-                }
-            }
-        }
+        savePreference(playerId, enabled, uses24HourTime(playerId));
+        hudPreferences.put(playerId, enabled);
         if (!enabled) {
             BossBar bar = bars.remove(playerId);
             Player player = plugin.getServer().getPlayer(playerId);
@@ -133,15 +130,45 @@ public final class SqlGardenCalendar implements GardenCalendar {
         }
     }
 
+    @Override
+    public boolean uses24HourTime(UUID playerId) {
+        return time24Preferences.getOrDefault(playerId, true);
+    }
+
+    @Override
+    public void setUses24HourTime(UUID playerId, boolean enabled) throws SQLException {
+        savePreference(playerId, hudEnabled(playerId), enabled);
+        time24Preferences.put(playerId, enabled);
+    }
+
+    private void savePreference(UUID playerId, boolean hudEnabled, boolean use24Hour) throws SQLException {
+        try (Connection connection = storage.connection()) {
+            int changed;
+            try (PreparedStatement update = connection.prepareStatement(
+                    "UPDATE gc_calendar_hud SET enabled=?,time_format=?,updated_at=? WHERE player_uuid=?")) {
+                update.setInt(1, hudEnabled ? 1 : 0);
+                update.setString(2, use24Hour ? "24H" : "12H");
+                update.setLong(3, System.currentTimeMillis());
+                update.setString(4, playerId.toString());
+                changed = update.executeUpdate();
+            }
+            if (changed == 0) {
+                try (PreparedStatement insert = connection.prepareStatement(
+                        "INSERT INTO gc_calendar_hud (player_uuid,enabled,time_format,updated_at) VALUES (?,?,?,?)")) {
+                    insert.setString(1, playerId.toString());
+                    insert.setInt(2, hudEnabled ? 1 : 0);
+                    insert.setString(3, use24Hour ? "24H" : "12H");
+                    insert.setLong(4, System.currentTimeMillis());
+                    insert.executeUpdate();
+                }
+            }
+        }
+    }
+
     public void refreshHud(Collection<? extends Player> players) {
         CalendarSnapshot snapshot = snapshot();
         for (Player player : players) {
-            boolean enabled;
-            try {
-                enabled = hudEnabled(player.getUniqueId());
-            } catch (SQLException exception) {
-                continue;
-            }
+            boolean enabled = hudEnabled(player.getUniqueId());
             if (!enabled) {
                 BossBar existing = bars.remove(player.getUniqueId());
                 if (existing != null) player.hideBossBar(existing);
@@ -153,7 +180,7 @@ public final class SqlGardenCalendar implements GardenCalendar {
                 return created;
             });
             float progress = Math.max(0.01f, Math.min(1.0f, snapshot.minuteOfDay() / 1440.0f));
-            bar.name(Component.text(snapshot.formattedTime()));
+            bar.name(Component.text(snapshot.formattedTime(uses24HourTime(player.getUniqueId()))));
             bar.progress(progress);
         }
     }
