@@ -7,6 +7,7 @@ import com.herasgarden.gardencore.claim.ClaimService;
 import com.herasgarden.gardencore.claim.ClaimType;
 import com.herasgarden.gardencore.claim.ClaimTag;
 import com.herasgarden.gardencore.api.integration.IntegrationEventType;
+import com.herasgarden.gardencore.api.land.PropertyPurchaseParticipant;
 import com.herasgarden.gardencore.api.order.GardenOrder;
 import com.herasgarden.gardencore.api.order.OrderState;
 import com.herasgarden.gardencore.api.order.OrderType;
@@ -22,6 +23,7 @@ import org.bukkit.World;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Player;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.*;
@@ -322,9 +324,22 @@ public final class PropertyService {
             String buyerKind,
             SqlProperty property
     ) {
+        return purchaseAccount(
+                buyerId, buyerName, buyerKind, property, PropertyPurchaseParticipant.none());
+    }
+
+    public PurchaseResult purchaseAccount(
+            UUID buyerId,
+            String buyerName,
+            String buyerKind,
+            SqlProperty property,
+            PropertyPurchaseParticipant participant
+    ) {
         if (buyerId == null || property == null) {
             return PurchaseResult.failure("A buyer account and property are required.");
         }
+        PropertyPurchaseParticipant purchaseParticipant =
+                participant == null ? PropertyPurchaseParticipant.none() : participant;
         ClaimOwnerType buyerType;
         try {
             buyerType = ClaimOwnerType.valueOf(
@@ -407,27 +422,42 @@ public final class PropertyService {
                 return PurchaseResult.failure("The property purchase could not be prepared right now.");
             }
 
-            try {
-                repository.completeSaleWithLedger(
-                        property,
-                        buyerType,
-                        buyerId,
-                        sellerId,
-                        property.price()
-                );
+            long agreedPrice = property.price();
+            try (Connection connection = plugin.storage().connection()) {
+                connection.setAutoCommit(false);
+                try {
+                    PropertyPurchaseParticipant.Context context = new PropertyPurchaseParticipant.Context(
+                            property.id(), property.claimId(), buyerId, buyerType.name(), sellerId, agreedPrice);
+                    purchaseParticipant.apply(connection, context);
+                    if (!plugin.currency().transfer(connection, buyerId, sellerId, agreedPrice)) {
+                        throw new SQLException("Buyer has insufficient Obols.");
+                    }
+                    repository.completeSaleWithLedger(
+                            connection, property, buyerType, buyerId, sellerId, agreedPrice);
+                    plugin.orders().transition(
+                            connection, order.id(), OrderState.PAID, "Property purchase ledger committed");
+                    plugin.orders().transition(
+                            connection, order.id(), OrderState.FULFILLING, "Property ownership committed");
+                    plugin.orders().transition(
+                            connection, order.id(), OrderState.COMPLETED,
+                            "Property ownership transferred and seller paid");
+                    connection.commit();
+                } catch (SQLException | RuntimeException exception) {
+                    connection.rollback();
+                    throw exception;
+                } finally {
+                    connection.setAutoCommit(true);
+                }
                 claim.setOwner(buyerType, buyerId);
                 property.setForSale(false);
-            } catch (SQLException exception) {
+            } catch (SQLException | RuntimeException exception) {
                 transitionOrder(order.id(), OrderState.PAYMENT_FAILED,
                         "Atomic property sale failed: " + exception.getMessage());
                 return PurchaseResult.failure(
-                        "The property purchase did not complete. No ownership or balance changes were committed.");
+                        "The property purchase did not complete. No ownership, balance, or resident changes were committed.");
             }
 
             refreshSigns(property);
-            transitionOrder(order.id(), OrderState.PAID, "Property purchase ledger committed");
-            transitionOrder(order.id(), OrderState.FULFILLING, "Property ownership committed");
-            transitionOrder(order.id(), OrderState.COMPLETED, "Property ownership transferred and seller paid");
             try {
                 plugin.integrations().publish(
                         IntegrationEventType.PROPERTY_SOLD,

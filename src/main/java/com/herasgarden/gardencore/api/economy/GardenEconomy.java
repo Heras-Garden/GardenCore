@@ -1,5 +1,7 @@
 package com.herasgarden.gardencore.api.economy;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.UUID;
 
 /**
@@ -14,6 +16,16 @@ public interface GardenEconomy {
     boolean withdraw(UUID playerUuid, long amount);
 
     boolean deposit(UUID playerUuid, long amount);
+
+    /**
+     * Mutates the Garden ledger using a caller-owned SQL transaction.
+     * Implementations must not commit, roll back, or close this connection.
+     */
+    boolean withdraw(Connection connection, UUID playerUuid, long amount) throws SQLException;
+
+    boolean deposit(Connection connection, UUID playerUuid, long amount) throws SQLException;
+
+    boolean transfer(Connection connection, UUID fromUuid, UUID toUuid, long amount) throws SQLException;
 
     String symbol();
 }

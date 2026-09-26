@@ -271,60 +271,41 @@ public final class PropertyRepository {
     }
 
     public void completeSaleWithLedger(
+            Connection connection,
             SqlProperty property,
             ClaimOwnerType newOwnerType,
             UUID newOwnerId,
             UUID expectedSellerId,
-            long price
+            long expectedPrice
     ) throws SQLException {
-        try (Connection connection = database.connection()) {
-            connection.setAutoCommit(false);
-            try {
-                try (PreparedStatement debit = connection.prepareStatement(
-                        "UPDATE gc_player_balances SET balance = balance - ?, updated_at = ? "
-                                + "WHERE player_uuid = ? AND balance >= ?")) {
-                    debit.setLong(1, price);
-                    debit.setLong(2, System.currentTimeMillis());
-                    debit.setString(3, newOwnerId.toString());
-                    debit.setLong(4, price);
-                    if (debit.executeUpdate() != 1) {
-                        throw new SQLException("Buyer has insufficient Obols.");
-                    }
-                }
-                try (PreparedStatement credit = connection.prepareStatement(
-                        "UPDATE gc_player_balances SET balance = balance + ?, updated_at = ? "
-                                + "WHERE player_uuid = ?")) {
-                    credit.setLong(1, price);
-                    credit.setLong(2, System.currentTimeMillis());
-                    credit.setString(3, expectedSellerId.toString());
-                    if (credit.executeUpdate() != 1) {
-                        throw new SQLException("Seller balance account is unavailable.");
-                    }
-                }
-                try (PreparedStatement claimUpdate = connection.prepareStatement(
-                        "UPDATE gc_claims SET owner_type = ?, owner_uuid = ? "
-                                + "WHERE claim_uuid = ? AND owner_type = 'PLAYER' AND owner_uuid = ?")) {
-                    claimUpdate.setString(1, newOwnerType.name());
-                    claimUpdate.setString(2, newOwnerId.toString());
-                    claimUpdate.setString(3, property.claimId().toString());
-                    claimUpdate.setString(4, expectedSellerId.toString());
-                    if (claimUpdate.executeUpdate() != 1) {
-                        throw new SQLException("Property owner changed before the sale completed.");
-                    }
-                }
-                try (PreparedStatement propertyUpdate = connection.prepareStatement(
-                        "UPDATE gc_properties SET for_sale = 0 WHERE property_uuid = ? AND for_sale = 1")) {
-                    propertyUpdate.setString(1, property.id().toString());
-                    if (propertyUpdate.executeUpdate() != 1) {
-                        throw new SQLException("Property is no longer available for sale.");
-                    }
-                }
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
-                throw exception;
-            } finally {
-                connection.setAutoCommit(true);
+        if (connection == null || property == null || newOwnerType == null
+                || newOwnerId == null || expectedSellerId == null || expectedPrice <= 0) {
+            throw new IllegalArgumentException("Complete property sale details are required.");
+        }
+
+        try (PreparedStatement claimUpdate = connection.prepareStatement(
+                "UPDATE gc_claims SET owner_type = ?, owner_uuid = ? "
+                        + "WHERE claim_uuid = ? AND owner_type = 'PLAYER' AND owner_uuid = ?")) {
+            claimUpdate.setString(1, newOwnerType.name());
+            claimUpdate.setString(2, newOwnerId.toString());
+            claimUpdate.setString(3, property.claimId().toString());
+            claimUpdate.setString(4, expectedSellerId.toString());
+            if (claimUpdate.executeUpdate() != 1) {
+                throw new SQLException("Property owner changed before the sale completed.");
+            }
+        }
+
+        String allowedAudience = newOwnerType == ClaimOwnerType.SOCIETY_CITIZEN ? "SOCIETY" : "PLAYER";
+        try (PreparedStatement propertyUpdate = connection.prepareStatement(
+                "UPDATE gc_properties SET for_sale = 0 "
+                        + "WHERE property_uuid = ? AND claim_uuid = ? AND for_sale = 1 AND price = ? "
+                        + "AND (buyer_audience = 'ANY' OR buyer_audience = ?)")) {
+            propertyUpdate.setString(1, property.id().toString());
+            propertyUpdate.setString(2, property.claimId().toString());
+            propertyUpdate.setLong(3, expectedPrice);
+            propertyUpdate.setString(4, allowedAudience);
+            if (propertyUpdate.executeUpdate() != 1) {
+                throw new SQLException("Property listing changed before the sale completed.");
             }
         }
     }

@@ -39,30 +39,77 @@ public final class GardenBalanceService {
 
     public boolean deposit(UUID playerId, long amount) throws SQLException {
         if (amount < 0) return false;
-        ensureAccount(playerId);
-        try (Connection connection = database.connection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE gc_player_balances SET balance = balance + ?, updated_at = ? WHERE player_uuid = ?")) {
+        try (Connection connection = database.connection()) {
+            connection.setAutoCommit(false);
+            try {
+                boolean changed = deposit(connection, playerId, amount);
+                if (changed) connection.commit(); else connection.rollback();
+                return changed;
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        }
+    }
+
+    public boolean deposit(Connection connection, UUID playerId, long amount) throws SQLException {
+        if (connection == null || playerId == null || amount < 0) return false;
+        ensureAccount(connection, playerId);
+        long maximumBeforeDeposit = Long.MAX_VALUE - amount;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE gc_player_balances SET balance = balance + ?, updated_at = ? "
+                        + "WHERE player_uuid = ? AND balance <= ?")) {
             statement.setLong(1, amount);
             statement.setLong(2, System.currentTimeMillis());
             statement.setString(3, playerId.toString());
+            statement.setLong(4, maximumBeforeDeposit);
             return statement.executeUpdate() == 1;
         }
     }
 
     public boolean withdraw(UUID playerId, long amount) throws SQLException {
         if (amount < 0) return false;
-        ensureAccount(playerId);
-        try (Connection connection = database.connection();
-             PreparedStatement statement = connection.prepareStatement(
-                     "UPDATE gc_player_balances SET balance = balance - ?, updated_at = ? "
-                             + "WHERE player_uuid = ? AND balance >= ?")) {
+        try (Connection connection = database.connection()) {
+            connection.setAutoCommit(false);
+            try {
+                boolean changed = withdraw(connection, playerId, amount);
+                if (changed) connection.commit(); else connection.rollback();
+                return changed;
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        }
+    }
+
+    public boolean withdraw(Connection connection, UUID playerId, long amount) throws SQLException {
+        if (connection == null || playerId == null || amount < 0) return false;
+        ensureAccount(connection, playerId);
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE gc_player_balances SET balance = balance - ?, updated_at = ? "
+                        + "WHERE player_uuid = ? AND balance >= ?")) {
             statement.setLong(1, amount);
             statement.setLong(2, System.currentTimeMillis());
             statement.setString(3, playerId.toString());
             statement.setLong(4, amount);
             return statement.executeUpdate() == 1;
         }
+    }
+
+    public boolean transfer(Connection connection, UUID fromId, UUID toId, long amount) throws SQLException {
+        if (connection == null || fromId == null || toId == null || amount < 0) return false;
+        ensureAccount(connection, fromId);
+        ensureAccount(connection, toId);
+        if (fromId.equals(toId) || amount == 0) return true;
+        if (!withdraw(connection, fromId, amount)) return false;
+        if (!deposit(connection, toId, amount)) {
+            throw new SQLException("Destination Garden balance would overflow.");
+        }
+        return true;
     }
 
     public void set(UUID playerId, long amount) throws SQLException {
@@ -114,26 +161,38 @@ public final class GardenBalanceService {
     }
 
     private void ensureAccount(UUID playerId) throws SQLException {
-        try (Connection connection = database.connection();
-             PreparedStatement query = connection.prepareStatement(
-                     "SELECT 1 FROM gc_player_balances WHERE player_uuid = ?")) {
+        try (Connection connection = database.connection()) {
+            ensureAccount(connection, playerId);
+        }
+    }
+
+    public void ensureAccount(Connection connection, UUID playerId) throws SQLException {
+        if (connection == null || playerId == null) {
+            throw new IllegalArgumentException("Connection and account UUID are required.");
+        }
+        try (PreparedStatement query = connection.prepareStatement(
+                "SELECT 1 FROM gc_player_balances WHERE player_uuid = ?")) {
             query.setString(1, playerId.toString());
             try (ResultSet result = query.executeQuery()) {
                 if (result.next()) return;
             }
         }
 
-        try (Connection connection = database.connection();
-             PreparedStatement insert = connection.prepareStatement(
-                     "INSERT INTO gc_player_balances (player_uuid, balance, updated_at) VALUES (?, ?, ?)")) {
+        try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO gc_player_balances (player_uuid, balance, updated_at) VALUES (?, ?, ?)")) {
             insert.setString(1, playerId.toString());
             insert.setLong(2, startingBalance);
             insert.setLong(3, System.currentTimeMillis());
             try {
                 insert.executeUpdate();
             } catch (SQLException duplicate) {
-                // Another operation may have created the account between the
-                // existence check and insert. Re-read on the caller path.
+                try (PreparedStatement query = connection.prepareStatement(
+                        "SELECT 1 FROM gc_player_balances WHERE player_uuid = ?")) {
+                    query.setString(1, playerId.toString());
+                    try (ResultSet result = query.executeQuery()) {
+                        if (!result.next()) throw duplicate;
+                    }
+                }
             }
         }
     }

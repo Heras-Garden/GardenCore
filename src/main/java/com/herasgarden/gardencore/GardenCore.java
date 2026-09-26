@@ -344,7 +344,8 @@ public final class GardenCore extends JavaPlugin implements GardenPlatform {
             economy = gardenVaultEconomy;
             gardenEconomy = new VaultGardenEconomy(
                     economy,
-                    getConfig().getString("obols.symbol", "⟡")
+                    getConfig().getString("obols.symbol", "⟡"),
+                    balanceService
             );
             orderService = new SqlOrderService(databaseManager);
             integrationOutbox = new SqlIntegrationOutbox(databaseManager);

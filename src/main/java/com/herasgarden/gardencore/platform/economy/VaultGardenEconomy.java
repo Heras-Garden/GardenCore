@@ -5,15 +5,19 @@ import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.UUID;
 
 public final class VaultGardenEconomy implements GardenEconomy {
     private final Economy economy;
     private final String symbol;
+    private final GardenBalanceService balances;
 
-    public VaultGardenEconomy(Economy economy, String symbol) {
+    public VaultGardenEconomy(Economy economy, String symbol, GardenBalanceService balances) {
         this.economy = economy;
         this.symbol = symbol == null || symbol.isBlank() ? "⟡" : symbol;
+        this.balances = balances;
     }
 
     @Override
@@ -40,6 +44,21 @@ public final class VaultGardenEconomy implements GardenEconomy {
             return false;
         }
         return economy.depositPlayer(player(playerUuid), amount).transactionSuccess();
+    }
+
+    @Override
+    public boolean withdraw(Connection connection, UUID playerUuid, long amount) throws SQLException {
+        return balances.withdraw(connection, playerUuid, amount);
+    }
+
+    @Override
+    public boolean deposit(Connection connection, UUID playerUuid, long amount) throws SQLException {
+        return balances.deposit(connection, playerUuid, amount);
+    }
+
+    @Override
+    public boolean transfer(Connection connection, UUID fromUuid, UUID toUuid, long amount) throws SQLException {
+        return balances.transfer(connection, fromUuid, toUuid, amount);
     }
 
     @Override

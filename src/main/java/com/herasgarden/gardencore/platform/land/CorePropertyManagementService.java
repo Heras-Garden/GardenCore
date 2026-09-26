@@ -3,6 +3,7 @@ package com.herasgarden.gardencore.platform.land;
 import com.herasgarden.gardencore.api.land.PropertyAddress;
 import com.herasgarden.gardencore.api.land.PropertyBlockPosition;
 import com.herasgarden.gardencore.api.land.PropertyManagementService;
+import com.herasgarden.gardencore.api.land.PropertyPurchaseParticipant;
 import com.herasgarden.gardencore.api.land.PropertyPurchaseResult;
 import com.herasgarden.gardencore.api.land.PropertySignBinding;
 import com.herasgarden.gardencore.api.land.PropertySignKind;
@@ -190,14 +191,15 @@ public final class CorePropertyManagementService implements PropertyManagementSe
             UUID buyerId,
             String buyerName,
             String buyerKind,
-            UUID propertyId
+            UUID propertyId,
+            PropertyPurchaseParticipant participant
     ) {
         SqlProperty property = properties.get(propertyId);
         if (property == null) {
             return new PropertyPurchaseResult(false, "That property no longer exists.", 0L);
         }
         PropertyService.PurchaseResult result =
-                properties.purchaseAccount(buyerId, buyerName, buyerKind, property);
+                properties.purchaseAccount(buyerId, buyerName, buyerKind, property, participant);
         return new PropertyPurchaseResult(result.success(), result.message(), result.price());
     }
 

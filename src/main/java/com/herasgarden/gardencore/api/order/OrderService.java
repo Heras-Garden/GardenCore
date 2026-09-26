@@ -1,5 +1,6 @@
 package com.herasgarden.gardencore.api.order;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,4 +24,7 @@ public interface OrderService {
     Optional<GardenOrder> find(UUID orderId) throws SQLException;
 
     GardenOrder transition(UUID orderId, OrderState nextState, String detail) throws SQLException;
+
+    GardenOrder transition(Connection connection, UUID orderId, OrderState nextState, String detail)
+            throws SQLException;
 }

@@ -82,10 +82,21 @@ public interface PropertyManagementService {
      * Purchase a listed property using a Garden account that is not necessarily
      * backed by an online Bukkit Player (for example a Society citizen).
      */
-    PropertyPurchaseResult purchaseAccount(
+    default PropertyPurchaseResult purchaseAccount(
             UUID buyerId,
             String buyerName,
             String buyerKind,
             UUID propertyId
+    ) {
+        return purchaseAccount(
+                buyerId, buyerName, buyerKind, propertyId, PropertyPurchaseParticipant.none());
+    }
+
+    PropertyPurchaseResult purchaseAccount(
+            UUID buyerId,
+            String buyerName,
+            String buyerKind,
+            UUID propertyId,
+            PropertyPurchaseParticipant participant
     );
 }

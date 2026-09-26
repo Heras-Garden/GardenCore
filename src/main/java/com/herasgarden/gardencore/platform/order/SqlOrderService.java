@@ -91,36 +91,12 @@ public final class SqlOrderService implements OrderService {
         if (orderId == null || nextState == null) {
             throw new IllegalArgumentException("Order id and next state are required.");
         }
-
         try (Connection connection = database.connection()) {
             connection.setAutoCommit(false);
             try {
-                GardenOrder current = load(connection, orderId)
-                        .orElseThrow(() -> new IllegalArgumentException("Order does not exist: " + orderId));
-                if (!canTransition(current.state(), nextState)) {
-                    throw new IllegalStateException("Invalid order transition: " + current.state() + " -> " + nextState);
-                }
-
-                long now = System.currentTimeMillis();
-                int changed;
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE gc_orders SET order_state = ?, updated_at = ? "
-                                + "WHERE order_uuid = ? AND order_state = ?")) {
-                    statement.setString(1, nextState.name());
-                    statement.setLong(2, now);
-                    statement.setString(3, orderId.toString());
-                    statement.setString(4, current.state().name());
-                    changed = statement.executeUpdate();
-                }
-                if (changed != 1) {
-                    throw new SQLException("Order changed concurrently. Reload and retry: " + orderId);
-                }
-
-                appendJournal(connection, orderId, current.state(), nextState, detail, now);
+                GardenOrder updated = transition(connection, orderId, nextState, detail);
                 connection.commit();
-                return new GardenOrder(current.id(), current.type(), nextState, current.buyerUuid(),
-                        current.sellerKind(), current.sellerId(), current.amount(), current.domainKey(),
-                        current.domainRef(), current.metadata(), current.createdAt(), now);
+                return updated;
             } catch (SQLException | RuntimeException exception) {
                 connection.rollback();
                 throw exception;
@@ -128,6 +104,39 @@ public final class SqlOrderService implements OrderService {
                 connection.setAutoCommit(true);
             }
         }
+    }
+
+    @Override
+    public GardenOrder transition(Connection connection, UUID orderId, OrderState nextState, String detail)
+            throws SQLException {
+        if (connection == null || orderId == null || nextState == null) {
+            throw new IllegalArgumentException("Connection, order id, and next state are required.");
+        }
+        GardenOrder current = load(connection, orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order does not exist: " + orderId));
+        if (!canTransition(current.state(), nextState)) {
+            throw new IllegalStateException("Invalid order transition: " + current.state() + " -> " + nextState);
+        }
+
+        long now = System.currentTimeMillis();
+        int changed;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE gc_orders SET order_state = ?, updated_at = ? "
+                        + "WHERE order_uuid = ? AND order_state = ?")) {
+            statement.setString(1, nextState.name());
+            statement.setLong(2, now);
+            statement.setString(3, orderId.toString());
+            statement.setString(4, current.state().name());
+            changed = statement.executeUpdate();
+        }
+        if (changed != 1) {
+            throw new SQLException("Order changed concurrently. Reload and retry: " + orderId);
+        }
+
+        appendJournal(connection, orderId, current.state(), nextState, detail, now);
+        return new GardenOrder(current.id(), current.type(), nextState, current.buyerUuid(),
+                current.sellerKind(), current.sellerId(), current.amount(), current.domainKey(),
+                current.domainRef(), current.metadata(), current.createdAt(), now);
     }
 
     private Optional<GardenOrder> load(Connection connection, UUID orderId) throws SQLException {
