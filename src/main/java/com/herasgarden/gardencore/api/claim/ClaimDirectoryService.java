@@ -1,5 +1,6 @@
 package com.herasgarden.gardencore.api.claim;
 
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,6 +13,12 @@ import java.util.UUID;
  */
 public interface ClaimDirectoryService {
     Optional<ClaimSummary> find(UUID claimId);
+
+    /**
+     * Reconcile the provider's read cache after a durable ownership change.
+     */
+    default void refresh() throws SQLException {
+    }
 
     default Optional<UUID> territoryAncestor(UUID claimId) {
         UUID current = claimId;
